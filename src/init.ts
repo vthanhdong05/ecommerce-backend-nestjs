@@ -20,10 +20,9 @@ const initOpenAPI = (app: INestApplication) => {
 const initApp = (app: INestApplication) => {
   const { APP_PREFIX = '/api', FE_URL } = process.env;
   app.setGlobalPrefix(APP_PREFIX);
-  // white list
   if (FE_URL) {
     app.enableCors({
-      origin: FE_URL,
+      origin: FE_URL, // FE_URL dùng để cấu hình CORS, cho phép frontend truy cập backend một cách an toàn.
     });
   }
   applyMiddleware(app);
