@@ -29,7 +29,9 @@ services:
     container_name: nestjs_ecommerce_app_dev
     restart: unless-stopped
     env_file:
-      - .env.docker
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:${DB_PORT}/${DB_NAME}?schema=public
     ports:
       - '${PORT}:3000'
     depends_on:
