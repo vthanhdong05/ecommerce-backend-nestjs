@@ -24,7 +24,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts
 
 # Copy Prisma client đã generate từ stage builder
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma

@@ -1,12 +1,12 @@
-# dùng để chạy nhiều container cùng lúc.
+# dùng để chạy nhiều container cùng lúc: 1 lệnh → chạy toàn hệ thống
 
 version: '3.9'
 
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: pg_nestjs_ecommerce
-    restart: unless-stopped
+    container_name: pg_nestjs_ecommerce_dev
+    restart: unless-stopped # container tự restart nếu crash.
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
@@ -14,7 +14,7 @@ services:
     ports:
       - '${DB_PORT}:5432'
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data # lưu dữ liệu database bền vững
     networks:
       - ecommerce_net
     healthcheck:
@@ -28,15 +28,15 @@ services:
       context: .
       dockerfile: Dockerfile
       target: production
-    container_name: nestjs_ecommerce_app
+    container_name: nestjs_ecommerce_app_dev
     restart: unless-stopped
     env_file:
       - .env
     ports:
-      - '${APP_PORT}:3000'
+      - '${PORT}:3000'
     depends_on:
       postgres:
-        condition: service_healthy
+        condition: service_healthy # app chỉ start khi PostgreSQL healthcheck pass
     networks:
       - ecommerce_net
 
