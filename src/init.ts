@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { applyMiddleware } from './common/middleware/common.middleware';
 import { cleanupOpenApiDoc } from 'nestjs-zod';
+import { applyMiddleware } from './common/middleware/common.middleware';
 
 const initOpenAPI = (app: INestApplication) => {
   const { APP_NAME } = process.env;
@@ -14,12 +14,13 @@ const initOpenAPI = (app: INestApplication) => {
       .build(),
   );
 
-  SwaggerModule.setup('api', app, cleanupOpenApiDoc(openApiDoc));
+  SwaggerModule.setup('api-docs', app, cleanupOpenApiDoc(openApiDoc));
 };
 
 const initApp = (app: INestApplication) => {
   const { APP_PREFIX = '/api', FE_URL } = process.env;
   app.setGlobalPrefix(APP_PREFIX);
+  // white list
   if (FE_URL) {
     app.enableCors({
       origin: FE_URL,
@@ -27,6 +28,8 @@ const initApp = (app: INestApplication) => {
   }
   applyMiddleware(app);
   initOpenAPI(app);
+
+  app.enableShutdownHooks();
 
   return app;
 };
