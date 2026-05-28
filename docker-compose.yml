@@ -29,7 +29,7 @@ services:
     container_name: nestjs_ecommerce_app_dev
     restart: unless-stopped
     env_file:
-      - .env
+      - .env.docker
     ports:
       - '${PORT}:3000'
     depends_on:
