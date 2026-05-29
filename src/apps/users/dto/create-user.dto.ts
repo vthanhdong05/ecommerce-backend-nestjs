@@ -1,19 +1,30 @@
-import { $Enums, Prisma } from '@prisma/client';
-// (ctrl .)
-export class CreateUserDto implements Prisma.UserCreateInput {
-  id?: string | undefined;
-  email!: string;
-  password!: string;
-  firstName?: string | null | undefined;
-  lastName?: string | null | undefined;
-  fullAddress?: string | null | undefined;
-  city?: string | null | undefined;
-  province?: string | null | undefined;
-  country?: string | null | undefined;
-  phone?: string | null | undefined;
-  status?: $Enums.UserStatus | undefined;
-  createdAt?: string | Date | undefined;
-  createdBy?: string | null | undefined;
-  updatedAt?: string | Date | undefined;
-  deletedAt?: string | Date | null | undefined;
-}
+import { z } from 'zod';
+
+export const CreateUserSchema = z.object({
+  email: z.string().trim().email({ message: 'Invalid email address' }),
+  password: z.string().trim().min(6, { message: 'Password must be at least 6 characters' }),
+  firstName: z
+    .string()
+    .trim()
+    .min(2, { message: 'First name must be at least 2 characters' })
+    .optional()
+    .nullable(),
+  lastName: z
+    .string()
+    .trim()
+    .min(2, { message: 'Last name must be at least 2 characters' })
+    .optional()
+    .nullable(),
+  fullAddress: z.string().trim().optional().nullable(),
+  city: z.string().trim().optional().nullable(),
+  province: z.string().trim().optional().nullable(),
+  country: z.string().trim().optional().nullable(),
+  phone: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{10,11}$/, { message: 'Invalid phone number' })
+    .optional()
+    .nullable(),
+});
+
+export type CreateUserDto = z.infer<typeof CreateUserSchema>;

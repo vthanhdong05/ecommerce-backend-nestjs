@@ -10,6 +10,11 @@ import { LoggerModule } from 'src/common/logger/logger.module';
 import { LoggingInterceptor } from 'src/common/logger/logging.interceptor';
 import { PrismaModule } from 'src/common/prisma/prisma.module';
 import { ApiUtilModule } from 'src/common/utils/api-util/api-util.module';
+import { CacheUtilModule } from 'src/common/utils/cache-util/cache-util.module';
+import { DateUtilModule } from 'src/common/utils/date-util/date-util.module';
+import { PaginationUtilModule } from 'src/common/utils/pagination-util/pagination-util.module';
+import { QueryUtilModule } from 'src/common/utils/query-util/query-util.module';
+import { StringUtilModule } from 'src/common/utils/string-util/string-util.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UsersModule } from './users/users.module';
@@ -25,6 +30,11 @@ import { UsersModule } from './users/users.module';
     ApiUtilModule,
     PrismaModule,
     HealthModule,
+    StringUtilModule,
+    DateUtilModule,
+    QueryUtilModule,
+    CacheUtilModule,
+    PaginationUtilModule,
     UsersModule,
   ],
   controllers: [AppController],
