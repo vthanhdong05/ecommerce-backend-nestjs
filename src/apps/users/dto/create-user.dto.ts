@@ -1,3 +1,5 @@
+import { createZodDto } from 'nestjs-zod';
+import { ImportExcel } from 'src/common/utils/excel-util/excel-util.const';
 import { z } from 'zod';
 
 export const CreateUserSchema = z.object({
@@ -27,4 +29,7 @@ export const CreateUserSchema = z.object({
     .nullable(),
 });
 
-export type CreateUserDto = z.infer<typeof CreateUserSchema>;
+// Đổi từ z.infer sang createZodDto
+export class CreateUserDto extends createZodDto(CreateUserSchema) {}
+
+export class ImportUsersDto extends ImportExcel {}

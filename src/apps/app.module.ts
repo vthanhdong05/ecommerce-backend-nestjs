@@ -12,6 +12,7 @@ import { PrismaModule } from 'src/common/prisma/prisma.module';
 import { ApiUtilModule } from 'src/common/utils/api-util/api-util.module';
 import { CacheUtilModule } from 'src/common/utils/cache-util/cache-util.module';
 import { DateUtilModule } from 'src/common/utils/date-util/date-util.module';
+import { ExcelUtilModule } from 'src/common/utils/excel-util/excel-util.module';
 import { PaginationUtilModule } from 'src/common/utils/pagination-util/pagination-util.module';
 import { QueryUtilModule } from 'src/common/utils/query-util/query-util.module';
 import { StringUtilModule } from 'src/common/utils/string-util/string-util.module';
@@ -35,6 +36,7 @@ import { UsersModule } from './users/users.module';
     QueryUtilModule,
     CacheUtilModule,
     PaginationUtilModule,
+    ExcelUtilModule,
     UsersModule,
   ],
   controllers: [AppController],
