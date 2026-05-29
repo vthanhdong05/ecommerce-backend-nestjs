@@ -4,6 +4,7 @@ import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { ZodSerializerInterceptor } from 'nestjs-zod';
 import { CatchEverythingFilter } from 'src/catch-everything/catch-everything.filter';
 import { ZodExceptionFilter } from 'src/catch-everything/zod-exception/zod-exception.filter';
+import { HealthModule } from 'src/common/health/health.module';
 import { LoggerModule } from 'src/common/logger/logger.module';
 import { LoggingInterceptor } from 'src/common/logger/logging.interceptor';
 import { PrismaModule } from 'src/common/prisma/prisma.module';
@@ -21,6 +22,7 @@ import { UsersModule } from './users/users.module';
     LoggerModule,
     ApiUtilModule,
     PrismaModule,
+    HealthModule,
     UsersModule,
   ],
   controllers: [AppController],
