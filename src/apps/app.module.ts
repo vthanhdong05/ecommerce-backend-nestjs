@@ -6,9 +6,11 @@ import { CatchEverythingFilter } from 'src/catch-everything/catch-everything.fil
 import { ZodExceptionFilter } from 'src/catch-everything/zod-exception/zod-exception.filter';
 import { LoggerModule } from 'src/common/logger/logger.module';
 import { LoggingInterceptor } from 'src/common/logger/logging.interceptor';
+import { PrismaModule } from 'src/common/prisma/prisma.module';
 import { ApiUtilModule } from 'src/common/utils/api-util/api-util.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { AppService } from './app.service';
     }),
     LoggerModule,
     ApiUtilModule,
+    PrismaModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [
