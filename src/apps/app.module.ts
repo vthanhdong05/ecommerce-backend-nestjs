@@ -13,12 +13,14 @@ import { ApiUtilModule } from 'src/common/utils/api-util/api-util.module';
 import { CacheUtilModule } from 'src/common/utils/cache-util/cache-util.module';
 import { DateUtilModule } from 'src/common/utils/date-util/date-util.module';
 import { ExcelUtilModule } from 'src/common/utils/excel-util/excel-util.module';
+import { FileUtilModule } from 'src/common/utils/file-util/file-util.module';
 import { PaginationUtilModule } from 'src/common/utils/pagination-util/pagination-util.module';
 import { QueryUtilModule } from 'src/common/utils/query-util/query-util.module';
 import { StringUtilModule } from 'src/common/utils/string-util/string-util.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UsersModule } from './users/users.module';
+import { FormatResponseInterceptor } from 'src/common/interceptors/format-response/format-response.interceptor';
 
 @Module({
   imports: [
@@ -37,6 +39,7 @@ import { UsersModule } from './users/users.module';
     CacheUtilModule,
     PaginationUtilModule,
     ExcelUtilModule,
+    FileUtilModule,
     UsersModule,
   ],
   controllers: [AppController],
@@ -54,6 +57,10 @@ import { UsersModule } from './users/users.module';
     {
       provide: APP_INTERCEPTOR,
       useClass: ZodSerializerInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: FormatResponseInterceptor,
     },
   ],
 })
