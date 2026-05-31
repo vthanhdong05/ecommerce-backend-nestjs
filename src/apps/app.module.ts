@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
-import { ZodSerializerInterceptor } from 'nestjs-zod';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
+import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
 import { CatchEverythingFilter } from 'src/catch-everything/catch-everything.filter';
 import { ZodExceptionFilter } from 'src/catch-everything/zod-exception/zod-exception.filter';
 import { validate } from 'src/common/envs/validate.env';
 import { HealthModule } from 'src/common/health/health.module';
+import { FormatResponseInterceptor } from 'src/common/interceptors/format-response/format-response.interceptor';
 import { LoggerModule } from 'src/common/logger/logger.module';
 import { LoggingInterceptor } from 'src/common/logger/logging.interceptor';
 import { PrismaModule } from 'src/common/prisma/prisma.module';
@@ -19,8 +20,9 @@ import { QueryUtilModule } from 'src/common/utils/query-util/query-util.module';
 import { StringUtilModule } from 'src/common/utils/string-util/string-util.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthGuard } from './auth/auth.guard';
+import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
-import { FormatResponseInterceptor } from 'src/common/interceptors/format-response/format-response.interceptor';
 
 @Module({
   imports: [
@@ -41,6 +43,7 @@ import { FormatResponseInterceptor } from 'src/common/interceptors/format-respon
     ExcelUtilModule,
     FileUtilModule,
     UsersModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [
@@ -61,6 +64,14 @@ import { FormatResponseInterceptor } from 'src/common/interceptors/format-respon
     {
       provide: APP_INTERCEPTOR,
       useClass: FormatResponseInterceptor,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: AuthGuard,
+    },
+    {
+      provide: APP_PIPE,
+      useClass: ZodValidationPipe,
     },
   ],
 })
