@@ -23,6 +23,26 @@ enum UserStatus {
   inactive
 }
 
+enum VendorStatus {
+  active
+  inactive
+}
+
+enum RoleType {
+  SUPER_ADMIN
+  SYSTEM
+  VENDOR
+}
+
+enum UserSystemRoleStatus {
+  active
+  inactive
+}
+
+enum UserVendorRoleStatus {
+  active
+  inactive
+}
 model User {
   id          String     @id @default(uuid())
   email       String     @unique
@@ -39,4 +59,104 @@ model User {
   createdBy   String?
   updatedAt   DateTime   @updatedAt
   deletedAt   DateTime?
+
+  vendors         Vendor[]
+  userSystemRoles UserSystemRole[] // (user có role hệ thống)
+  userVendorRoles UserVendorRole[] // (user tham gia nhiều vendor với role khác nhau)
+}
+
+model Vendor {
+  id            String       @id @default(uuid())
+  userID        String
+  name          String
+  slug          String       @unique
+  description   String?
+  logoUrl       String?
+  taxCode       String?
+  totalProducts Int          @default(0)
+  totalOrders   Int          @default(0)
+  status        VendorStatus @default(active)
+  createdAt     DateTime     @default(now())
+  createdBy     String?
+  updatedAt     DateTime     @updatedAt
+  deletedAt     DateTime?
+
+  user            User             @relation(fields: [userID], references: [id])
+  userVendorRoles UserVendorRole[] // (danh sách thành viên trong vendor)
+}
+
+model Role {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  roleType    RoleType  @default(VENDOR)
+  createdAt   DateTime  @default(now())
+  createdBy   String?
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  userSystemRoles UserSystemRole[]
+  userVendorRoles UserVendorRole[]
+  rolePermissions RolePermission[]
+
+  @@unique([name])
+}
+
+model Permission {
+  id                 String    @id @default(uuid())
+  name               String
+  description        String?
+  // [route]_[action] (Ex: [/products]_[read], [/products]_[create])
+  key                String // (dùng để check permission trong code)
+  isSystemPermission Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  createdBy          String?
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+
+  rolePermissions RolePermission[]
+
+  @@unique([name, key])
+}
+
+model RolePermission {
+  roleID       String
+  permissionID String
+  createdAt    DateTime @default(now())
+  createdBy    String?
+
+  role       Role       @relation(fields: [roleID], references: [id])
+  permission Permission @relation(fields: [permissionID], references: [id])
+
+  @@id([roleID, permissionID])
+}
+
+model UserSystemRole {
+  id        String               @id @default(uuid())
+  userID    String
+  roleID    String
+  status    UserSystemRoleStatus @default(active)
+  createdAt DateTime             @default(now())
+  createdBy String?
+
+  user User @relation(fields: [userID], references: [id])
+  role Role @relation(fields: [roleID], references: [id])
+
+  @@unique([userID, roleID]) // (1 user có thể có nhiều system role)
+}
+
+model UserVendorRole {
+  id        String               @id @default(uuid())
+  userID    String
+  vendorID  String
+  roleID    String
+  status    UserVendorRoleStatus @default(active)
+  createdAt DateTime             @default(now())
+  createdBy String?
+
+  user   User   @relation(fields: [userID], references: [id])
+  vendor Vendor @relation(fields: [vendorID], references: [id])
+  role   Role   @relation(fields: [roleID], references: [id])
+
+  @@unique([userID, vendorID]) // (1 user chỉ có 1 role trong 1 vendor)
 }
