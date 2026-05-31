@@ -73,8 +73,12 @@ export class UsersService extends PrismaBaseService<'user'> implements Options<U
   }
 
   async createUser(createUserDto: CreateUserDto) {
+    const hashedPassword = await this.stringUtilServive.hash(createUserDto.password);
     const data = await this.extended.create({
-      data: createUserDto,
+      data: {
+        ...createUserDto,
+        password: hashedPassword,
+      },
     });
     return data;
   }
