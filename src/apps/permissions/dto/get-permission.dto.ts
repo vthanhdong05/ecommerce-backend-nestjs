@@ -6,7 +6,7 @@ import { Permission } from '../entities/permission.entity';
 class GetPermissionsPaginationDto extends IntersectionType(Pagination, PartialType(Permission)) {}
 
 class ExportPermissionsDto {
-  ids: NonNullable<Prisma.PermissionWhereUniqueInput['id']>[];
+  ids!: NonNullable<Prisma.PermissionWhereUniqueInput['id']>[];
 }
 
-export { GetPermissionsPaginationDto, ExportPermissionsDto };
+export { ExportPermissionsDto, GetPermissionsPaginationDto };
