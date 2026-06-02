@@ -1,5 +1,5 @@
 import { IntersectionType, PartialType } from '@nestjs/mapped-types';
-import { Prisma } from '@prisma/client';
+import { Prisma, Vendor } from '@prisma/client';
 import { Pagination } from 'src/common/utils/pagination-util/pagination-util.interface';
 import { User } from '../entities/user.entity';
 
@@ -7,9 +7,15 @@ import { User } from '../entities/user.entity';
 class ExportUsersDto {
   ids?: NonNullable<Prisma.UserWhereUniqueInput['id']>[];
 }
+
+class IsExistPermissionKeyDto {
+  userID?: User['id'];
+  permissionKey?: string;
+  vendorID?: Vendor['id'];
+}
 class GetUsersPaginationDto extends IntersectionType(
   Pagination,
   PartialType(User), // (filter)
 ) {}
 
-export { ExportUsersDto, GetUsersPaginationDto };
+export { ExportUsersDto, GetUsersPaginationDto, IsExistPermissionKeyDto };
