@@ -38,7 +38,7 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
     return super.extended;
   }
 
-  // (Export dữ liệu User–Vendor–Role ra file Excel)
+  // Export dữ liệu User–Vendor–Role ra file Excel
   async exportUserVendorRoles(params: ExportUserVendorRolesDto) {
     const { userIDs, roleIDs, vendorIDs } = params ?? {};
     const where: Prisma.UserVendorRoleWhereInput = {};
@@ -84,7 +84,7 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
     return data;
   }
 
-  // (Import dữ liệu từ file Excel vào database)
+  // Import dữ liệu từ file Excel vào database
   async importUserVendorRoles({ file, user }: ImportUserVendorRolesDto) {
     const userVendorRoleSheetName = this.excelSheets[this.userVendorRoleEntityName];
 
@@ -134,7 +134,7 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
     });
   }
 
-  // (Lấy danh sách mapping từ database)
+  // Lấy danh sách mapping từ database
   async getUserVendorRoles() {
     const data = await this.extended.findMany({
       select: {
@@ -160,18 +160,18 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
         },
       },
     });
-    // (Map để gom nhóm theo vendor)
+    // Map để gom nhóm theo vendor
     const vendorMap = new Map<string, { vendor: any; members: any[] }>();
     for (const { vendor, user, role } of data) {
       if (!vendorMap.has(vendor.id)) {
-        vendorMap.set(vendor.id, { vendor, members: [] }); // (check vendor nếu chưa có -> tạo mới)
+        vendorMap.set(vendor.id, { vendor, members: [] }); // check vendor nếu chưa có -> tạo mới
       }
-      vendorMap.get(vendor.id)!.members.push({ user, role }); // (Thêm user+role vào vendor)
+      vendorMap.get(vendor.id)!.members.push({ user, role }); // Thêm user+role vào vendor
     }
     return [...vendorMap.values()];
   }
 
-  // (Lấy danh sách members của vendor)
+  // Lấy danh sách members của vendor
   async getMembers(vendorID: Vendor['id']) {
     const data = await this.extended.findMany({
       where: { vendorID },
@@ -187,7 +187,7 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
     return data;
   }
 
-  // (Thêm thành viên vào vendor)
+  // Thêm thành viên vào vendor
   async addMember({
     vendorID,
     userID,
@@ -246,7 +246,7 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
     });
   }
 
-  // (export members)
+  // export members
   async exportMembers(vendorID: string) {
     const userVendorRoles = await this.extended.export({
       where: { vendorID },
@@ -269,7 +269,7 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
     });
   }
 
-  // (import members)
+  // import members
   async importMembers({
     vendorID,
     file,
