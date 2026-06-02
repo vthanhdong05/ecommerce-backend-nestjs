@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { omit } from 'es-toolkit';
-import { User } from 'src/apps/users/entities/user.entity';
+import { Vendor } from 'src/apps/vendors/entities/vendor.entity';
 import { DateUtilService } from '../utils/date-util/date-util.service';
 import { StringUtilService } from '../utils/string-util/string-util.service';
 
@@ -60,7 +60,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   // generateData() – xử lý riêng từng model
   private generateData<T>(data: T, model: string) {
-    const modelsGenSlug = [User.name];
+    const modelsGenSlug = [Vendor.name];
 
     if (modelsGenSlug.includes(model)) {
       if (Array.isArray(data)) {
