@@ -22,8 +22,10 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthGuard } from './auth/auth.guard';
 import { AuthModule } from './auth/auth.module';
+import { PermissionsModule } from './permissions/permissions.module';
 import { RolesModule } from './roles/roles.module';
 import { UsersModule } from './users/users.module';
+import { RolePermissionsModule } from './role-permissions/role-permissions.module';
 
 @Module({
   imports: [
@@ -46,6 +48,8 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     AuthModule,
     RolesModule,
+    PermissionsModule,
+    RolePermissionsModule,
   ],
   controllers: [AppController],
   providers: [
