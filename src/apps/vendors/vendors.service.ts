@@ -64,9 +64,7 @@ export class VendorsService extends PrismaBaseService<'vendor'> implements Optio
     const data = await this.extended.create({
       data: {
         ...createVendorDto,
-        user: {
-          connect: { id: user.userID }, // ← connect user vào vendor
-        },
+        userID: user.userID,
       } as any,
     });
     return data;
