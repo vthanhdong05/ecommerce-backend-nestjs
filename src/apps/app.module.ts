@@ -28,6 +28,7 @@ import { RolesModule } from './roles/roles.module';
 import { UserSystemRolesModule } from './user-system-role/user-system-roles.module';
 import { UsersModule } from './users/users.module';
 import { VendorsModule } from './vendors/vendors.module';
+import { AccessControlGuard } from 'src/common/guards/access-control/access-control.guard';
 
 @Module({
   imports: [
@@ -78,6 +79,10 @@ import { VendorsModule } from './vendors/vendors.module';
     {
       provide: APP_GUARD,
       useClass: AuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: AccessControlGuard,
     },
     {
       provide: APP_PIPE,
