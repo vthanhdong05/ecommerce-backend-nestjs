@@ -23,9 +23,10 @@ import { AppService } from './app.service';
 import { AuthGuard } from './auth/auth.guard';
 import { AuthModule } from './auth/auth.module';
 import { PermissionsModule } from './permissions/permissions.module';
+import { RolePermissionsModule } from './role-permissions/role-permissions.module';
 import { RolesModule } from './roles/roles.module';
 import { UsersModule } from './users/users.module';
-import { RolePermissionsModule } from './role-permissions/role-permissions.module';
+import { UserSystemRolesModule } from './user-system-role/user-system-roles.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { RolePermissionsModule } from './role-permissions/role-permissions.modul
     RolesModule,
     PermissionsModule,
     RolePermissionsModule,
+    UserSystemRolesModule,
   ],
   controllers: [AppController],
   providers: [

@@ -1,2 +1,2 @@
 -- SELECT * FROM "User"
-DELETE FROM "User"
+DELETE FROM "Role"

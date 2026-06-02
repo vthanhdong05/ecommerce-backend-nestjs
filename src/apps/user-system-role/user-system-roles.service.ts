@@ -1,0 +1,174 @@
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { Prisma, RoleType } from '@prisma/client';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { PrismaBaseService } from '../../common/services/prisma-base.service';
+import { ExcelUtilService } from '../../common/utils/excel-util/excel-util.service';
+import { RolesService } from '../roles/roles.service';
+import { UsersService } from '../users/users.service';
+import { ImportUserSystemRolesDto } from './dto/create-user-system-role.dto';
+import { ExportUserSystemRolesDto } from './dto/get-user-system-role.dto';
+import { UserSystemRole } from './entities/user-system-role.entity';
+
+@Injectable()
+export class UserSystemRolesService extends PrismaBaseService<'userSystemRole'> {
+  private userSystemRoleEntityName = UserSystemRole.name;
+  private excelSheets = {
+    [this.userSystemRoleEntityName]: this.userSystemRoleEntityName,
+  };
+  constructor(
+    public prismaService: PrismaService,
+    private excelUtilService: ExcelUtilService,
+    private usersService: UsersService,
+    private rolesService: RolesService,
+  ) {
+    super(prismaService, 'userSystemRole');
+  }
+
+  get client() {
+    return super.client;
+  }
+
+  get extended() {
+    return super.extended;
+  }
+
+  // Export dữ liệu User–Vendor–Role ra file Excel
+  async exportUserSystemRoles(params: ExportUserSystemRolesDto) {
+    const { userIDs, roleIDs } = params ?? {};
+    const where: Prisma.UserSystemRoleWhereInput = {};
+
+    if (userIDs) {
+      where.userID = { in: userIDs };
+    }
+    if (roleIDs) {
+      where.roleID = { in: roleIDs };
+    }
+
+    const userSystemRoles = await this.extended.export({
+      select: {
+        user: { select: { email: true } },
+        role: { select: { name: true } },
+      },
+      where: {
+        ...where,
+        role: {
+          roleType: { in: [RoleType.SUPER_ADMIN, RoleType.SYSTEM] },
+        },
+      },
+    });
+
+    const mappedData =
+      userSystemRoles.length > 0
+        ? userSystemRoles.map(({ user, role }) => ({
+            userEmail: user?.email ?? '',
+            roleName: role?.name ?? '',
+          }))
+        : [{ userEmail: '', roleName: '' }];
+
+    return this.excelUtilService.generateExcel({
+      worksheets: [
+        {
+          sheetName: this.excelSheets[this.userSystemRoleEntityName],
+          fieldsExclude: [],
+          data: mappedData,
+        },
+      ],
+    });
+  }
+
+  // Import dữ liệu từ file Excel vào database
+  async importUserSystemRoles({ file, user }: ImportUserSystemRolesDto) {
+    const sheetName = this.excelSheets[this.userSystemRoleEntityName];
+    const dataCreated = await this.excelUtilService.read(file);
+    const dataImport = dataCreated[sheetName];
+
+    const usersData = new Map<string, string>();
+    const allUsers = await this.usersService.client.findMany({
+      select: { id: true, email: true },
+    });
+    for (const user of allUsers) {
+      usersData.set(user.email, user.id);
+    }
+
+    const rolesData = new Map<string, string>();
+    const allRoles = await this.rolesService.client.findMany({
+      where: {
+        roleType: { in: [RoleType.SUPER_ADMIN, RoleType.SYSTEM] },
+      },
+      select: { id: true, name: true },
+    });
+    for (const role of allRoles) {
+      rolesData.set(role.name, role.id);
+    }
+
+    const idsMapping = dataImport.map((item) => {
+      const { userEmail, roleName } = item ?? {};
+      const userID = usersData.get(userEmail);
+      if (!userID) {
+        throw new BadRequestException(`User not found with email: "${userEmail}"`);
+      }
+      const roleID = rolesData.get(roleName);
+      if (!roleID) {
+        throw new BadRequestException(`System role not found: "${roleName}"`);
+      }
+      return { userID, roleID };
+    });
+
+    await this.extended.deleteMany({
+      where: {
+        OR: idsMapping,
+      },
+    });
+
+    const data = await this.extended.createMany({
+      data: idsMapping.map((item) => ({
+        ...item,
+        createdBy: user,
+      })),
+    });
+
+    return data;
+  }
+
+  // Lấy danh sách mapping từ database
+  async getUserSystemRoles() {
+    const data = await this.extended.findMany({
+      select: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
+        role: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          },
+        },
+      },
+    });
+
+    const userMap = new Map<
+      string,
+      {
+        user: any;
+        roles: any[];
+      }
+    >();
+
+    for (const { user, role } of data) {
+      if (!userMap.has(user.id)) {
+        userMap.set(user.id, {
+          user,
+          roles: [],
+        });
+      }
+
+      userMap.get(user.id)!.roles.push(role);
+    }
+
+    return Array.from(userMap.values());
+  }
+}
