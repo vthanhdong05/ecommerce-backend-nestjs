@@ -25,8 +25,9 @@ import { AuthModule } from './auth/auth.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { RolePermissionsModule } from './role-permissions/role-permissions.module';
 import { RolesModule } from './roles/roles.module';
-import { UsersModule } from './users/users.module';
 import { UserSystemRolesModule } from './user-system-role/user-system-roles.module';
+import { UsersModule } from './users/users.module';
+import { VendorsModule } from './vendors/vendors.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { UserSystemRolesModule } from './user-system-role/user-system-roles.modu
     PermissionsModule,
     RolePermissionsModule,
     UserSystemRolesModule,
+    VendorsModule,
   ],
   controllers: [AppController],
   providers: [
