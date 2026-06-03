@@ -44,6 +44,13 @@ export class VendorsService extends PrismaBaseService<'vendor'> implements Optio
     return data;
   }
 
+  async getVendorProfile(vendorID: Vendor['id']) {
+    const data = await this.extended.findUnique({
+      where: { id: vendorID },
+    });
+    return data;
+  }
+
   async getVendors({ page, itemPerPage }: GetVendorsPaginationDto) {
     const totalItems = await this.extended.count();
     const paging = this.paginationUtilService.paging({
@@ -75,6 +82,15 @@ export class VendorsService extends PrismaBaseService<'vendor'> implements Optio
     const data = await this.extended.update({
       data: dataUpdate,
       where,
+    });
+    return data;
+  }
+
+  async updateVendorProfile(params: { vendorID: Vendor['id']; data: UpdateVendorDto }) {
+    const { vendorID, data: dataUpdate } = params;
+    const data = await this.extended.update({
+      where: { id: vendorID },
+      data: dataUpdate,
     });
     return data;
   }

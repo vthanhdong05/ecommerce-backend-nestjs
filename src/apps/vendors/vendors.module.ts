@@ -5,10 +5,11 @@ import { PaginationUtilService } from '../../common/utils/pagination-util/pagina
 import { UsersService } from '../users/users.service';
 import { VendorsController } from './vendors.controller';
 import { VendorsService } from './vendors.service';
+import { VendorProfileController } from './vendor-profile.controller';
 
 @Module({
   imports: [ExcelUtilModule],
-  controllers: [VendorsController],
+  controllers: [VendorsController, VendorProfileController],
   providers: [VendorsService, PaginationUtilService, UsersService, StringUtilService],
   exports: [VendorsService],
 })
