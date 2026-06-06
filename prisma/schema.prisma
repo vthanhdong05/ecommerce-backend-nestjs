@@ -43,6 +43,40 @@ enum UserVendorRoleStatus {
   active
   inactive
 }
+
+enum ProductStatus {
+  active
+  inactive
+  draft
+}
+
+enum OrderStatus {
+  pending
+  confirmed
+  processing
+  shipped
+  delivered
+  cancelled
+  refunded
+}
+
+enum AddressType {
+  billing
+  shipping
+}
+
+enum PromotionStatus {
+  active
+  inactive
+  expired
+}
+
+enum PromotionType {
+  percentage
+  fixed_amount
+  free_shipping
+  buy_x_get_y
+}
 model User {
   id          String     @id @default(uuid())
   email       String     @unique
@@ -63,6 +97,8 @@ model User {
   vendors         Vendor[]
   userSystemRoles UserSystemRole[] // (user có role hệ thống)
   userVendorRoles UserVendorRole[] // (user tham gia nhiều vendor với role khác nhau)
+  orders          Order[]
+  cart            Cart?
 }
 
 model Vendor {
@@ -83,6 +119,8 @@ model Vendor {
 
   user            User             @relation(fields: [userID], references: [id])
   userVendorRoles UserVendorRole[] // (danh sách thành viên trong vendor)
+  products        Product[]
+  orderItems      OrderItem[]
 }
 
 model Role {
@@ -160,3 +198,202 @@ model UserVendorRole {
 
   @@unique([userID, vendorID]) // (1 user chỉ có 1 role trong 1 vendor)
 }
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  description String?
+  parentID    String?
+  imageUrl    String?
+  createdAt   DateTime  @default(now())
+  createdBy   String?
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  parent            Category?         @relation("CategoryParent", fields: [parentID], references: [id])
+  children          Category[]        @relation("CategoryParent")
+  productCategories ProductCategory[]
+}
+
+model Product {
+  id            String        @id @default(uuid())
+  vendorID      String
+  name          String
+  slug          String
+  description   String?
+  sku           String?       @unique
+  price         Decimal
+  stockQuantity Int           @default(0)
+  status        ProductStatus @default(draft)
+  createdAt     DateTime      @default(now())
+  createdBy     String?
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+
+  vendor            Vendor            @relation(fields: [vendorID], references: [id])
+  productCategories ProductCategory[]
+  productImages     ProductImage[]
+  productVariants   ProductVariant[]
+
+  @@unique([vendorID, slug])
+}
+
+model ProductVariant {
+  id            String    @id @default(uuid())
+  productID     String
+  name          String?
+  sku           String?   @unique
+  price         Decimal
+  stockQuantity Int       @default(0)
+  attributes    Json?
+  createdAt     DateTime  @default(now())
+  createdBy     String?
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  product       Product        @relation(fields: [productID], references: [id])
+  productImages ProductImage[]
+  orderItems    OrderItem[]
+  cartItems     CartItem[]
+}
+
+model ProductCategory {
+  productID  String
+  categoryID String
+
+  product  Product  @relation(fields: [productID], references: [id])
+  category Category @relation(fields: [categoryID], references: [id])
+
+  @@id([productID, categoryID])
+}
+
+model ProductImage {
+  id               String    @id @default(uuid())
+  name             String
+  description      String?
+  productID        String? // (ảnh thuộc product gốc)
+  productVariantID String? // (ảnh thuộc variant)
+  imageUrl         String
+  sortOrder        Int       @default(0)
+  createdAt        DateTime  @default(now())
+  createdBy        String?
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  product        Product?        @relation(fields: [productID], references: [id])
+  productVariant ProductVariant? @relation(fields: [productVariantID], references: [id])
+}
+
+model Order {
+  id             String      @id @default(uuid())
+  orderNumber    String      @unique
+  userID         String
+  status         OrderStatus @default(pending)
+  subtotal       Decimal
+  taxAmount      Decimal     @default(0)
+  shippingAmount Decimal     @default(0)
+  discountAmount Decimal     @default(0)
+  totalAmount    Decimal
+  currency       String      @default("VND")
+  notes          String?
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime    @default(now())
+  createdBy      String?
+  updatedAt      DateTime    @updatedAt
+  deletedAt      DateTime?
+
+  user            User             @relation(fields: [userID], references: [id])
+  orderItems      OrderItem[]
+  orderAddresses  OrderAddress[]
+  orderPromotions OrderPromotion[]
+  // payments        Payment[]
+}
+
+model OrderItem {
+  id                     String  @id @default(uuid())
+  orderID                String
+  vendorID               String
+  productVariantID       String
+  quantity               Int
+  unitPrice              Decimal
+  totalPrice             Decimal
+  productVariantSnapshot Json?
+
+  vendor         Vendor         @relation(fields: [vendorID], references: [id])
+  productVariant ProductVariant @relation(fields: [productVariantID], references: [id])
+  order          Order          @relation(fields: [orderID], references: [id])
+}
+
+model OrderAddress {
+  id          String      @id @default(uuid())
+  orderID     String
+  type        AddressType
+  firstName   String
+  lastName    String?
+  company     String?
+  fullAddress String
+  city        String?
+  province    String?
+  country     String?
+  phone       String
+
+  order Order @relation(fields: [orderID], references: [id])
+}
+
+model Promotion {
+  id          String          @id @default(uuid())
+  code        String          @unique
+  name        String
+  description String?
+  type        PromotionType
+  value       Decimal
+  usageLimit  Int?
+  startDate   DateTime        @default(now())
+  endDate     DateTime?
+  status      PromotionStatus @default(inactive)
+  createdAt   DateTime        @default(now())
+  createdBy   String?
+  updatedAt   DateTime        @updatedAt
+  deletedAt   DateTime?
+
+  orderPromotions OrderPromotion[]
+}
+
+model OrderPromotion {
+  id             String  @id @default(uuid())
+  orderID        String
+  promotionID    String
+  discountAmount Decimal @default(0)
+
+  order     Order     @relation(fields: [orderID], references: [id])
+  promotion Promotion @relation(fields: [promotionID], references: [id])
+
+  @@unique([orderID, promotionID])
+}
+
+model Cart {
+  id        String   @id @default(uuid())
+  userID    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User       @relation(fields: [userID], references: [id])
+  cartItems CartItem[]
+}
+
+model CartItem {
+  id               String   @id @default(uuid())
+  cartID           String
+  productVariantID String
+  quantity         Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  cart           Cart           @relation(fields: [cartID], references: [id], onDelete: Cascade)
+  productVariant ProductVariant @relation(fields: [productVariantID], references: [id])
+
+  @@unique([cartID, productVariantID])
+}
+
