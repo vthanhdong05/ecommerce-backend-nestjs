@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
 import { CatchEverythingFilter } from 'src/catch-everything/catch-everything.filter';
 import { ZodExceptionFilter } from 'src/catch-everything/zod-exception/zod-exception.filter';
@@ -31,7 +32,7 @@ import { RolesModule } from './roles/roles.module';
 import { UserSystemRolesModule } from './user-system-role/user-system-roles.module';
 import { UsersModule } from './users/users.module';
 import { VendorsModule } from './vendors/vendors.module';
-import { EventEmitterModule } from '@nestjs/event-emitter';
+import { AutoMockingModule } from 'src/testing/auto-mocking/auto-mocking.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     FileUtilModule,
     EventsModule,
     EventEmitterModule.forRoot(),
+    AutoMockingModule,
     UsersModule,
     AuthModule,
     RolesModule,
