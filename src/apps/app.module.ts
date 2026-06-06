@@ -21,6 +21,7 @@ import { PaginationUtilModule } from 'src/common/utils/pagination-util/paginatio
 import { QueryUtilModule } from 'src/common/utils/query-util/query-util.module';
 import { StringUtilModule } from 'src/common/utils/string-util/string-util.module';
 import { EventsModule } from 'src/events/events.module';
+import { AutoMockingModule } from 'src/testing/auto-mocking/auto-mocking.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthGuard } from './auth/auth.guard';
@@ -32,7 +33,7 @@ import { RolesModule } from './roles/roles.module';
 import { UserSystemRolesModule } from './user-system-role/user-system-roles.module';
 import { UsersModule } from './users/users.module';
 import { VendorsModule } from './vendors/vendors.module';
-import { AutoMockingModule } from 'src/testing/auto-mocking/auto-mocking.module';
+import { CategoriesModule } from './categories/categories.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { AutoMockingModule } from 'src/testing/auto-mocking/auto-mocking.module'
     UserSystemRolesModule,
     VendorsModule,
     ProductImagesModule,
+    CategoriesModule,
   ],
   controllers: [AppController],
   providers: [
