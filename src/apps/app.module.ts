@@ -19,16 +19,19 @@ import { FileUtilModule } from 'src/common/utils/file-util/file-util.module';
 import { PaginationUtilModule } from 'src/common/utils/pagination-util/pagination-util.module';
 import { QueryUtilModule } from 'src/common/utils/query-util/query-util.module';
 import { StringUtilModule } from 'src/common/utils/string-util/string-util.module';
+import { EventsModule } from 'src/events/events.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthGuard } from './auth/auth.guard';
 import { AuthModule } from './auth/auth.module';
 import { PermissionsModule } from './permissions/permissions.module';
+import { ProductImagesModule } from './product-images/product-images.module';
 import { RolePermissionsModule } from './role-permissions/role-permissions.module';
 import { RolesModule } from './roles/roles.module';
 import { UserSystemRolesModule } from './user-system-role/user-system-roles.module';
 import { UsersModule } from './users/users.module';
 import { VendorsModule } from './vendors/vendors.module';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 
 @Module({
   imports: [
@@ -48,6 +51,8 @@ import { VendorsModule } from './vendors/vendors.module';
     PaginationUtilModule,
     ExcelUtilModule,
     FileUtilModule,
+    EventsModule,
+    EventEmitterModule.forRoot(),
     UsersModule,
     AuthModule,
     RolesModule,
@@ -55,6 +60,7 @@ import { VendorsModule } from './vendors/vendors.module';
     RolePermissionsModule,
     UserSystemRolesModule,
     VendorsModule,
+    ProductImagesModule,
   ],
   controllers: [AppController],
   providers: [

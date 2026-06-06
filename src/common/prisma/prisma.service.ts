@@ -1,6 +1,9 @@
 import { Injectable, NotFoundException, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { omit } from 'es-toolkit';
+import { RolePermission } from 'src/apps/role-permissions/entities/role-permission.entity';
+import { UserSystemRole } from 'src/apps/user-system-role/entities/user-system-role.entity';
+import { UserVendorRole } from 'src/apps/user-vendor-roles/entities/user-vendor-role.entity';
 import { Vendor } from 'src/apps/vendors/entities/vendor.entity';
 import { DateUtilService } from '../utils/date-util/date-util.service';
 import { StringUtilService } from '../utils/string-util/string-util.service';
@@ -81,6 +84,13 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     return data;
   }
 
+  // (JUNCTION_TABLES – bảng trung gian -> Đây là bảng quan hệ nhiều-nhiều)
+  private readonly JUNCTION_TABLES = [
+    RolePermission.name,
+    UserVendorRole.name,
+    UserSystemRole.name,
+  ];
+
   initExtended() {
     const extended = this.$extends({
       query: {
@@ -89,8 +99,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
             args.where = { ...args.where, deletedAt: null };
             return query(args);
           },
-          findMany: ({ args, query }) => {
+          findMany: ({ args, query, model }) => {
             // (Không áp dụng với bảng trung gian)
+            if (!this.JUNCTION_TABLES.includes(model)) {
+              args.where = { ...args.where, deletedAt: null };
+              args.orderBy = [{ updatedAt: 'desc' }, { createdAt: 'desc' }];
+            }
             return query(args);
           },
           create: ({ args, query, model }) => {
