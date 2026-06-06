@@ -8,7 +8,7 @@ export const CreateCategorySchema = z.object({
   }),
   description: z.string().trim().optional().nullable(),
   imageUrl: z.string().trim().optional().nullable(),
-  parentId: z.string().uuid().optional().nullable(),
+  parentID: z.string().uuid().optional().nullable(),
 });
 
 export class CreateCategoryDto extends createZodDto(CreateCategorySchema) {}

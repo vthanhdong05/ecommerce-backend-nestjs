@@ -14,7 +14,7 @@ export const CreateProductSchema = z.object({
   }),
   stockQuantity: z.coerce.number().int().min(0).optional(),
   status: z.nativeEnum(ProductStatus).optional(),
-  vendorId: z.string().uuid({
+  vendorID: z.string().uuid({
     message: 'Invalid vendor id',
   }),
 });
