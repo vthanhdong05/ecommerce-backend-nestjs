@@ -5,6 +5,7 @@ import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
 import { CatchEverythingFilter } from 'src/catch-everything/catch-everything.filter';
 import { ZodExceptionFilter } from 'src/catch-everything/zod-exception/zod-exception.filter';
 import { validate } from 'src/common/envs/validate.env';
+import { AccessControlGuard } from 'src/common/guards/access-control/access-control.guard';
 import { HealthModule } from 'src/common/health/health.module';
 import { FormatResponseInterceptor } from 'src/common/interceptors/format-response/format-response.interceptor';
 import { LoggerModule } from 'src/common/logger/logger.module';
@@ -28,7 +29,6 @@ import { RolesModule } from './roles/roles.module';
 import { UserSystemRolesModule } from './user-system-role/user-system-roles.module';
 import { UsersModule } from './users/users.module';
 import { VendorsModule } from './vendors/vendors.module';
-import { AccessControlGuard } from 'src/common/guards/access-control/access-control.guard';
 
 @Module({
   imports: [
