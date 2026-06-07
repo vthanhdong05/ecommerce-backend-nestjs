@@ -12,6 +12,7 @@ import { CreateVendorDto, ImportVendorsDto } from './dto/create-vendor.dto';
 import { ExportVendorsDto, GetVendorsPaginationDto } from './dto/get-vendor.dto';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
 import { Vendor } from './entities/vendor.entity';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 
 @Injectable()
 export class VendorsService extends PrismaBaseService<'vendor'> implements Options<Vendor> {
@@ -25,6 +26,7 @@ export class VendorsService extends PrismaBaseService<'vendor'> implements Optio
     private paginationUtilService: PaginationUtilService,
     private userService: UsersService,
     private queryUtil: QueryUtilService,
+    private eventEmitter: EventEmitter2,
   ) {
     super(prismaService, 'vendor');
   }
@@ -154,5 +156,21 @@ export class VendorsService extends PrismaBaseService<'vendor'> implements Optio
   async deleteVendor(where: Prisma.VendorWhereUniqueInput) {
     const data = await this.extended.softDelete(where);
     return data;
+  }
+
+  @OnEvent('product.created')
+  async onProductCreated({ vendorID }: { vendorID: Vendor['id'] }) {
+    await this.extended.update({
+      where: { id: vendorID },
+      data: { totalProducts: { increment: 1 } },
+    });
+  }
+
+  @OnEvent('product.deleted')
+  async onProductDeleted({ vendorID }: { vendorID: Vendor['id'] }) {
+    await this.extended.update({
+      where: { id: vendorID },
+      data: { totalProducts: { decrement: 1 } },
+    });
   }
 }
