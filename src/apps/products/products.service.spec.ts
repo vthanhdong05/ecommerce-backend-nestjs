@@ -57,11 +57,16 @@ describe('ProductsService', () => {
     excelUtilService = module.get<ExcelUtilService>(ExcelUtilService);
     vendorsService = module.get<VendorsService>(VendorsService);
     eventEmitter = module.get<EventEmitter2>(EventEmitter2);
-    emitSpy = jest.spyOn(eventEmitter, 'emit').mockReturnValue(true);
 
     jest.spyOn(service, 'extended', 'get').mockReturnValue(mockExtended as any);
-    jest.spyOn(vendorsService, 'client', 'get').mockReturnValue(mockVendorsClient as any);
-    jest.spyOn(eventEmitter, 'emit').mockReturnValue(true);
+
+    // Dùng Object.defineProperty thay vì jest.spyOn cho getter client
+    Object.defineProperty(vendorsService, 'client', {
+      get: () => mockVendorsClient,
+      configurable: true,
+    });
+
+    emitSpy = jest.spyOn(eventEmitter, 'emit').mockReturnValue(true);
     jest.spyOn(paginationUtilService, 'paging').mockReturnValue({
       skip: 0,
       format: jest.fn().mockReturnValue({ list: [], totalPages: 0, totalItems: 0 }),
