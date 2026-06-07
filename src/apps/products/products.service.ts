@@ -203,4 +203,14 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
     this.eventEmitter.emit('product.deleted', { vendorID: product.vendorID });
     return data;
   }
+
+  // check xem product co thuoc vendor hay khong
+  async verifyProductOwnership({ productID, vendorID }: { productID: string; vendorID: string }) {
+    const product = await this.extended.findFirst({
+      where: { id: productID, vendorID },
+    });
+    if (!product)
+      throw new NotFoundException('Product not found or does not belong to this vendor');
+    return product;
+  }
 }
