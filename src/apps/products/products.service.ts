@@ -79,6 +79,7 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
         user,
       } as any,
     });
+    console.log('>>> emit product.created', data.vendorID);
     this.eventEmitter.emit('product.created', { vendorID: data.vendorID });
     return data;
   }
@@ -158,13 +159,16 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
     const dataCreated = await this.excelUtilService.read(file);
     const rows = dataCreated[productSheetName];
     if (vendorID) {
-      return this.extended.createMany({
+      const data = await this.extended.createMany({
         data: rows.map(({ vendorName: _vendorName, ...rest }) => ({
           ...rest,
           vendorID,
           user,
         })),
       });
+      // emit 1 lần với count
+      this.eventEmitter.emit('product.imported', { vendorID, count: data.count });
+      return data;
     }
     const vendorNames = [...new Set(rows.map((r) => r.vendorName))] as string[];
     const vendors = await this.vendorService.client.findMany({
@@ -172,25 +176,31 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
       select: { id: true, name: true },
     });
     const vendorMap = new Map(vendors.map((v) => [v.name, v.id]));
-    return this.extended.createMany({
-      data: rows.map(({ vendorName, ...rest }) => {
-        const vendorID = vendorMap.get(vendorName);
-        if (!vendorID) throw new BadRequestException(`Vendor "${vendorName}" does not exist`);
-        return { ...rest, vendorID, user };
-      }),
+    const mappedRows = rows.map(({ vendorName, ...rest }) => {
+      const vendorID = vendorMap.get(vendorName);
+      if (!vendorID) throw new BadRequestException(`Vendor "${vendorName}" does not exist`);
+      return { ...rest, vendorID, user };
     });
+    const data = await this.extended.createMany({ data: mappedRows });
+    // Emit theo từng vendor
+    const vendorCounts = mappedRows.reduce<Record<string, number>>((acc, row) => {
+      acc[row.vendorID] = (acc[row.vendorID] ?? 0) + 1;
+      return acc;
+    }, {});
+    for (const [vID, count] of Object.entries(vendorCounts)) {
+      this.eventEmitter.emit('product.imported', { vendorID: vID, count });
+    }
+    return data;
   }
 
   async deleteProduct(where: Prisma.ProductWhereUniqueInput & { vendorID?: Vendor['id'] }) {
     const { vendorID, ...uniqueWhere } = where;
-    if (vendorID) {
-      const product = await this.extended.findFirst({
-        where: { id: uniqueWhere.id, vendorID },
-      });
-      if (!product) throw new NotFoundException('Product not found');
-    }
+    const product = await this.extended.findFirst({
+      where: { id: uniqueWhere.id, ...(vendorID && { vendorID }) },
+    });
+    if (!product) throw new NotFoundException('Product not found');
     const data = await this.extended.softDelete(uniqueWhere);
-    this.eventEmitter.emit('product.deleted', { vendorID: data.vendorID });
+    this.eventEmitter.emit('product.deleted', { vendorID: product.vendorID });
     return data;
   }
 }

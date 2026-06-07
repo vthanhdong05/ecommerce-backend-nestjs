@@ -23,7 +23,7 @@ import type { GetOptionsParams } from '../../common/query/options.interface';
 import type { File } from '../../common/utils/excel-util/dto/excel-util.interface';
 import { Vendor } from '../vendors/entities/vendor.entity';
 import { ProductParams } from './consts/product.const';
-import { CreateProductDto } from './dto/create-product.dto';
+import { CreateVendorProductDto } from './dto/create-product.dto';
 import { ExportProductsDto, GetProductsPaginationDto } from './dto/get-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductsService } from './products.service';
@@ -72,20 +72,10 @@ export class VendorProductsController {
   @Post()
   createProduct(
     @Param(ProductParams.VENDOR_ID) vendorId: Vendor['id'],
-    @Body() createDto: CreateProductDto,
+    @Body() createDto: CreateVendorProductDto,
     @User() user: UserInfo,
   ) {
-    return this.productsService.createProduct(
-      {
-        ...createDto,
-        vendor: {
-          connect: {
-            id: vendorId,
-          },
-        },
-      } as CreateProductDto,
-      user,
-    );
+    return this.productsService.createProduct({ ...createDto, vendorID: vendorId }, user);
   }
 
   @Get()

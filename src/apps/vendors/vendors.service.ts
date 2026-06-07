@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { UserInfo } from 'src/common/decorators/user.decorator';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -12,7 +13,6 @@ import { CreateVendorDto, ImportVendorsDto } from './dto/create-vendor.dto';
 import { ExportVendorsDto, GetVendorsPaginationDto } from './dto/get-vendor.dto';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
 import { Vendor } from './entities/vendor.entity';
-import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 
 @Injectable()
 export class VendorsService extends PrismaBaseService<'vendor'> implements Options<Vendor> {
@@ -171,6 +171,14 @@ export class VendorsService extends PrismaBaseService<'vendor'> implements Optio
     await this.extended.update({
       where: { id: vendorID },
       data: { totalProducts: { decrement: 1 } },
+    });
+  }
+
+  @OnEvent('product.imported')
+  async onProductImported({ vendorID, count }: { vendorID: Vendor['id']; count: number }) {
+    await this.extended.update({
+      where: { id: vendorID },
+      data: { totalProducts: { increment: count } },
     });
   }
 }

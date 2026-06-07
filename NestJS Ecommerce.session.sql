@@ -1,2 +1,2 @@
-SELECT * FROM "ProductImage"
--- DELETE FROM "Role"
+-- SELECT * FROM "Product"
+DELETE FROM "Product"
