@@ -7,10 +7,15 @@ import { VendorsModule } from '../vendors/vendors.module';
 import { ProductImagesController } from './product-images.controller';
 import { ProductImagesService } from './product-images.service';
 import { VendorProductImageController } from './vendor-product-images.controller';
+import { VendorProductVariantImagesController } from './vendor-productvatiant-images.controller';
 
 @Module({
   imports: [FileUtilModule, ProductsModule, VendorsModule],
-  controllers: [ProductImagesController, VendorProductImageController],
+  controllers: [
+    ProductImagesController,
+    VendorProductImageController,
+    VendorProductVariantImagesController,
+  ],
   providers: [ProductImagesService, ExcelUtilService, FileUtilService],
   exports: [ProductImagesService],
 })
