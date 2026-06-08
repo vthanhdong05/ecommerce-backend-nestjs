@@ -29,13 +29,14 @@ import { AuthModule } from './auth/auth.module';
 import { CategoriesModule } from './categories/categories.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { ProductImagesModule } from './product-images/product-images.module';
+import { ProductVariantsModule } from './product-variants/product-variants.module';
 import { ProductsModule } from './products/products.module';
 import { RolePermissionsModule } from './role-permissions/role-permissions.module';
 import { RolesModule } from './roles/roles.module';
 import { UserSystemRolesModule } from './user-system-role/user-system-roles.module';
 import { UsersModule } from './users/users.module';
 import { VendorsModule } from './vendors/vendors.module';
-import { ProductVariantsModule } from './product-variants/product-variants.module';
+import { ProductCategoriesModule } from './product-categories/product-categories.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { ProductVariantsModule } from './product-variants/product-variants.modul
     CategoriesModule,
     ProductsModule,
     ProductVariantsModule,
+    ProductCategoriesModule,
   ],
   controllers: [AppController],
   providers: [

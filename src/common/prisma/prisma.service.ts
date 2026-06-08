@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, OnModuleDestroy, OnModuleInit } from '@n
 import { Prisma, PrismaClient } from '@prisma/client';
 import { omit } from 'es-toolkit';
 import { Category } from 'src/apps/categories/entities/category.entity';
+import { ProductCategory } from 'src/apps/product-categories/entities/product-category.entity';
 import { Product } from 'src/apps/products/entities/product.entity';
 import { RolePermission } from 'src/apps/role-permissions/entities/role-permission.entity';
 import { UserSystemRole } from 'src/apps/user-system-role/entities/user-system-role.entity';
@@ -91,6 +92,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     RolePermission.name,
     UserVendorRole.name,
     UserSystemRole.name,
+    ProductCategory.name,
   ];
 
   initExtended() {
