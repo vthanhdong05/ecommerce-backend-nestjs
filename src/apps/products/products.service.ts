@@ -73,13 +73,16 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
   }
 
   async createProduct(createProductDto: CreateProductDto, user: UserInfo) {
+    const { categoryIDs, ...productData } = createProductDto;
     const data = await this.extended.create({
       data: {
-        ...createProductDto,
+        ...productData,
         user,
+        productCategories: {
+          create: categoryIDs.map((categoryID) => ({ categoryID })),
+        },
       } as any,
     });
-    console.log('>>> emit product.created', data.vendorID);
     this.eventEmitter.emit('product.created', { vendorID: data.vendorID });
     return data;
   }

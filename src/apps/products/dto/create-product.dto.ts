@@ -12,6 +12,9 @@ export const CreateProductSchema = z.object({
   stockQuantity: z.coerce.number().int().min(0).optional(),
   status: z.nativeEnum(ProductStatus).optional(),
   vendorID: z.string().uuid({ message: 'Invalid vendor id' }),
+  categoryIDs: z.array(z.string().uuid()).min(1, {
+    message: 'At least one category is required',
+  }),
 });
 
 // Schema cho Vendor — không cần vendorID (lấy từ URL)

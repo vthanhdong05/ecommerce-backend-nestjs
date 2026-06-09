@@ -228,7 +228,31 @@ export class ProductCategoriesService extends PrismaBaseService<'productCategory
         },
       },
     });
-
-    return data;
+    // Gom nhóm theo product
+    const productMap = new Map<
+      string,
+      {
+        product: {
+          id: string;
+          name: string;
+          description: string | null;
+        };
+        categories: {
+          id: string;
+          name: string;
+          description: string | null;
+        }[];
+      }
+    >();
+    for (const { product, category } of data) {
+      if (!productMap.has(product.id)) {
+        productMap.set(product.id, {
+          product,
+          categories: [],
+        });
+      }
+      productMap.get(product.id)!.categories.push(category);
+    }
+    return [...productMap.values()];
   }
 }
