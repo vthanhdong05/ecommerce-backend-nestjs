@@ -6,23 +6,14 @@ import {
   Param,
   Patch,
   Post,
-  Query,
-  Res,
-  UploadedFile,
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import { ProductImage, ProductVariant } from '@prisma/client';
-import type { Response } from 'express';
-import { ExcelResponseInterceptor } from 'src/common/interceptors/excel-response/excel-response.interceptor';
-import type { UserInfo } from '../../common/decorators/user.decorator';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { ProductImage, ProductVariant, Vendor } from '@prisma/client';
+import type { UserInfo } from 'src/common/decorators/user.decorator';
 import { User } from '../../common/decorators/user.decorator';
-import type { File } from '../../common/utils/excel-util/dto/excel-util.interface';
-import { Product } from '../products/entities/product.entity';
-import { Vendor } from '../vendors/entities/vendor.entity';
 import { VendorProductImageParams } from './const/vendor-product-image.const';
-import { ExportProductImagesDto } from './dto/get-product-images.dto';
 import { UpdateProductImageDto } from './dto/update-product-images.dto';
 import { ProductImagesService } from './product-images.service';
 
@@ -36,7 +27,7 @@ export class VendorProductVariantImagesController {
   @UseInterceptors(FilesInterceptor('files'))
   uploadVariantImages(
     @Param(VendorProductImageParams.VENDOR_ID_PARAM) vendorId: Vendor['id'],
-    @Param(VendorProductImageParams.PRODUCT_ID_PARAM) productId: Product['id'],
+    @Param(VendorProductImageParams.PRODUCT_ID_PARAM) productId: string,
     @Param(VendorProductImageParams.VARIANT_ID_PARAM) variantId: ProductVariant['id'],
     @UploadedFiles() files: Express.Multer.File[],
     @User() user: UserInfo,
@@ -50,73 +41,28 @@ export class VendorProductVariantImagesController {
     });
   }
 
-  @Post('import')
-  @UseInterceptors(FileInterceptor('file'))
-  importVariantImages(
-    @Param(VendorProductImageParams.VENDOR_ID_PARAM) vendorId: Vendor['id'],
-    @Param(VendorProductImageParams.PRODUCT_ID_PARAM) productId: Product['id'],
-    @UploadedFile() file: File,
-    @User() user: UserInfo,
-  ) {
-    return this.productImagesService.importProductImages({
-      file,
-      user,
-      productID: productId,
-      vendorID: vendorId,
-    });
-  }
-
-  @Get('export')
-  @UseInterceptors(ExcelResponseInterceptor)
-  async exportVariantImages(
-    @Param(VendorProductImageParams.VENDOR_ID_PARAM) vendorId: Vendor['id'],
-    @Param(VendorProductImageParams.PRODUCT_ID_PARAM) productId: Product['id'],
-    @Query() exportDto: ExportProductImagesDto,
-    @Res() res: Response,
-  ) {
-    const workbook = await this.productImagesService.exportProductImages({
-      ...exportDto,
-      productID: productId,
-      vendorID: vendorId,
-    });
-    await workbook.xlsx.write(res);
-    res.end();
-  }
-
   @Get()
   getVariantImages(
     @Param(VendorProductImageParams.VENDOR_ID_PARAM) vendorId: Vendor['id'],
-    @Param(VendorProductImageParams.PRODUCT_ID_PARAM) productId: Product['id'],
+    @Param(VendorProductImageParams.PRODUCT_ID_PARAM) productId: string,
     @Param(VendorProductImageParams.VARIANT_ID_PARAM) variantId: ProductVariant['id'],
   ) {
-    return this.productImagesService.getProductImages({
-      where: { productVariantID: variantId },
-      productID: productId,
+    return this.productImagesService.getProductImagesByProduct({
       vendorID: vendorId,
-    });
-  }
-
-  @Get(':id')
-  getVariantImage(
-    @Param(VendorProductImageParams.VENDOR_ID_PARAM) vendorId: Vendor['id'],
-    @Param(VendorProductImageParams.PRODUCT_ID_PARAM) productId: Product['id'],
-    @Param('id') id: ProductImage['id'],
-  ) {
-    return this.productImagesService.getProductImage({
-      id,
       productID: productId,
-      vendorID: vendorId,
+      productVariantID: variantId,
     });
   }
 
   @Patch(':id')
   updateVariantImage(
     @Param(VendorProductImageParams.VENDOR_ID_PARAM) vendorId: Vendor['id'],
+    @Param(VendorProductImageParams.PRODUCT_ID_PARAM) productId: string,
     @Param('id') id: ProductImage['id'],
     @Body() updateDto: UpdateProductImageDto,
   ) {
     return this.productImagesService.updateProductImage({
-      where: { id, vendorID: vendorId },
+      where: { id, vendorID: vendorId, productID: productId },
       data: updateDto,
     });
   }
@@ -124,11 +70,13 @@ export class VendorProductVariantImagesController {
   @Delete(':id')
   deleteVariantImage(
     @Param(VendorProductImageParams.VENDOR_ID_PARAM) vendorId: Vendor['id'],
+    @Param(VendorProductImageParams.PRODUCT_ID_PARAM) productId: string,
     @Param('id') id: ProductImage['id'],
   ) {
     return this.productImagesService.deleteProductImage({
       id,
       vendorID: vendorId,
+      productID: productId,
     });
   }
 }

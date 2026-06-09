@@ -253,4 +253,24 @@ export class ProductVariantsService
     if (!variant) throw new NotFoundException('ProductVariant not found');
     return this.extended.softDelete(uniqueWhere);
   }
+
+  async verifyVariantOwnership({
+    productVariantID,
+    productID,
+  }: {
+    productVariantID: ProductVariant['id'];
+    productID: Product['id'];
+  }) {
+    const variant = await this.extended.findFirst({
+      where: {
+        id: productVariantID,
+        productID,
+      },
+    });
+
+    if (!variant) {
+      throw new NotFoundException('Variant not found or does not belong to this product');
+    }
+    return variant;
+  }
 }

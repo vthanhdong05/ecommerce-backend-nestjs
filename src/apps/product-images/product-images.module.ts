@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ExcelUtilService } from '../../common/utils/excel-util/excel-util.service';
 import { FileUtilModule } from '../../common/utils/file-util/file-util.module';
 import { FileUtilService } from '../../common/utils/file-util/file-util.service';
+import { ProductVariantsModule } from '../product-variants/product-variants.module';
 import { ProductsModule } from '../products/products.module';
 import { VendorsModule } from '../vendors/vendors.module';
 import { ProductImagesController } from './product-images.controller';
@@ -10,7 +11,7 @@ import { VendorProductImageController } from './vendor-product-images.controller
 import { VendorProductVariantImagesController } from './vendor-productvatiant-images.controller';
 
 @Module({
-  imports: [FileUtilModule, ProductsModule, VendorsModule],
+  imports: [FileUtilModule, ProductsModule, VendorsModule, ProductVariantsModule],
   controllers: [
     ProductImagesController,
     VendorProductImageController,

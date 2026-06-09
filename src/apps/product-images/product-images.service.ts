@@ -8,6 +8,7 @@ import { PrismaBaseService } from '../../common/services/prisma-base.service';
 import { ExcelUtilService } from '../../common/utils/excel-util/excel-util.service';
 import { FileUtilService } from '../../common/utils/file-util/file-util.service';
 import { ProductVariant } from '../product-variants/entities/product-variant.entity';
+import { ProductVariantsService } from '../product-variants/product-variants.service';
 import { Product } from '../products/entities/product.entity';
 import { ProductsService } from '../products/products.service';
 import { Vendor } from '../vendors/entities/vendor.entity';
@@ -29,6 +30,7 @@ export class ProductImagesService extends PrismaBaseService<'productImage'> {
     private fileUtilService: FileUtilService,
     private eventEmitter: EventEmitter2,
     private productService: ProductsService,
+    private productVariantService: ProductVariantsService,
   ) {
     super(prismaService, 'productImage');
   }
@@ -41,17 +43,36 @@ export class ProductImagesService extends PrismaBaseService<'productImage'> {
     return super.extended;
   }
 
-  async getProductImage(
-    where: Prisma.ProductImageWhereInput & {
-      vendorID?: Vendor['id'];
+  async getProductImage(productImageWhereUniqueInput: Prisma.ProductImageWhereInput) {
+    const data = await this.extended.findFirst({
+      where: productImageWhereUniqueInput,
+    });
+    return data;
+  }
+
+  // (getProductImages filter theo productID/productVariantID)
+  async getProductImagesByProduct(
+    params: {
       productID?: Product['id'];
-    },
+      productVariantID?: ProductVariant['id'];
+      vendorID?: Vendor['id'];
+    } = {},
   ) {
-    const { vendorID, productID, ...uniqueWhere } = where;
+    const { productID, productVariantID, vendorID } = params;
+    // Nếu có vendorID + productID thì check product thuộc vendor
     if (vendorID && productID) {
       await this.productService.verifyProductOwnership({ productID, vendorID });
     }
-    return this.extended.findFirst({ where: uniqueWhere });
+    // Nếu có productID + productVariantID thì check variant thuộc product
+    if (productID && productVariantID) {
+      await this.productVariantService.verifyVariantOwnership({ productVariantID, productID });
+    }
+    return this.extended.findMany({
+      where: {
+        ...(productID && { productID }),
+        ...(productVariantID && { productVariantID }),
+      },
+    });
   }
 
   async getProductImages(
@@ -61,101 +82,109 @@ export class ProductImagesService extends PrismaBaseService<'productImage'> {
       cursor?: Prisma.ProductImageWhereUniqueInput;
       where?: Prisma.ProductImageWhereInput;
       orderBy?: Prisma.ProductImageOrderByWithRelationInput;
-      vendorID?: Vendor['id'];
-      productID?: Product['id'];
     } = {},
   ) {
-    const { skip, take, cursor, where, orderBy, vendorID, productID } = params;
-
-    if (vendorID && productID) {
-      await this.productService.verifyProductOwnership({ productID, vendorID });
-    }
-    return this.extended.findMany({
+    const { skip, take, cursor, where, orderBy } = params;
+    const data = await this.extended.findMany({
       skip,
       take,
       cursor,
       where,
       orderBy,
     });
+    return data;
   }
 
-  async createProductImage(createProductImageDto: CreateProductImageDto, vendorID?: Vendor['id']) {
-    if (vendorID && createProductImageDto.productID) {
-      await this.productService.verifyProductOwnership({
-        productID: createProductImageDto.productID,
-        vendorID,
-      });
-    }
-    return this.extended.create({
+  async createProductImage(createProductImageDto: CreateProductImageDto) {
+    const data = await this.extended.create({
       data: createProductImageDto,
     });
+    return data;
   }
 
-  // Verify image thuộc product của vendor
-  async verifyImageOwnership({ imageID, vendorID }: { imageID: string; vendorID: Vendor['id'] }) {
+  // (Verify image thuộc product của vendor)
+  async verifyImageOwnership({
+    imageID,
+    vendorID,
+    productID,
+  }: {
+    imageID: string;
+    vendorID?: Vendor['id'];
+    productID?: Product['id'];
+  }) {
     const image = await this.extended.findFirst({
       where: {
         id: imageID,
         OR: [
           {
-            product: { vendorID }, // ← ảnh product
+            product: { vendorID, ...(productID && { id: productID }) },
           },
           {
             productVariant: {
-              product: { vendorID }, // ← ảnh variant
+              product: { vendorID, ...(productID && { id: productID }) },
             },
           },
         ],
       },
     });
-    if (!image) throw new NotFoundException('Image not found');
+    if (!image) {
+      throw new NotFoundException('Image not found or does not belong to this vendor/product');
+    }
     return image;
   }
 
   async updateProductImage(params: {
-    where: Prisma.ProductImageWhereUniqueInput & { vendorID?: Vendor['id'] };
+    where: Prisma.ProductImageWhereUniqueInput & {
+      vendorID?: Vendor['id'];
+      productID?: Product['id'];
+      productVariantID?: ProductVariant['id'];
+    };
     data: UpdateProductImageDto;
   }) {
     const { where, data: dataUpdate } = params;
-    const { vendorID, ...uniqueWhere } = where;
-    if (vendorID)
+    const { vendorID, productID, productVariantID, ...uniqueWhere } = where;
+    if (vendorID) {
       await this.verifyImageOwnership({
         imageID: uniqueWhere.id as string,
         vendorID,
+        productID,
       });
+    }
+    if (productID && productVariantID) {
+      await this.productVariantService.verifyVariantOwnership({ productVariantID, productID });
+    }
     return this.extended.update({ data: dataUpdate, where: uniqueWhere });
   }
 
   async deleteProductImage(
-    where: Prisma.ProductImageWhereUniqueInput & { vendorID?: Vendor['id'] },
+    where: Prisma.ProductImageWhereUniqueInput & {
+      vendorID?: Vendor['id'];
+      productID?: Product['id'];
+      productVariantID?: ProductVariant['id'];
+    },
   ) {
-    const { vendorID, ...uniqueWhere } = where;
-    if (vendorID)
+    const { vendorID, productID, productVariantID, ...uniqueWhere } = where;
+
+    if (vendorID) {
       await this.verifyImageOwnership({
         imageID: uniqueWhere.id as string,
         vendorID,
+        productID,
       });
+    }
+    if (productID && productVariantID) {
+      await this.productVariantService.verifyVariantOwnership({ productVariantID, productID });
+    }
     return this.extended.softDelete(uniqueWhere);
   }
 
-  async exportProductImages({
-    ids,
-    vendorID,
-    productID,
-  }: ExportProductImagesDto & {
-    vendorID?: Vendor['id'];
-    productID?: Product['id'];
-  }) {
-    if (vendorID && productID) {
-      await this.productService.verifyProductOwnership({ productID, vendorID });
-    }
+  async exportProductImages({ ids }: ExportProductImagesDto) {
     const productImages = await this.extended.export({
       where: {
-        ...(ids && { id: { in: ids } }),
-        ...(productID && { productID }),
+        id: { in: ids },
       },
     });
-    return this.excelUtilService.generateExcel({
+    const data = this.excelUtilService.generateExcel({
       worksheets: [
         {
           sheetName: this.excelSheets[this.productImageEntityName],
@@ -163,32 +192,22 @@ export class ProductImagesService extends PrismaBaseService<'productImage'> {
         },
       ],
     });
+    return data;
   }
 
-  async importProductImages({
-    file,
-    user,
-    vendorID,
-    productID,
-  }: ImportProductImagesDto & {
-    vendorID?: Vendor['id'];
-    productID?: Product['id'];
-  }) {
-    if (vendorID && productID) {
-      await this.productService.verifyProductOwnership({ productID, vendorID });
-    }
+  async importProductImages({ file, user }: ImportProductImagesDto) {
     const productImageSheetName = this.excelSheets[this.productImageEntityName];
     const dataCreated = await this.excelUtilService.read(file);
-    return this.extended.createMany({
+    const data = await this.extended.createMany({
       data: dataCreated[productImageSheetName].map((item) => ({
         ...item,
-        ...(productID && { productID }),
         user,
       })),
     });
+    return data;
   }
 
-  uploadProductImages({
+  async uploadProductImages({
     files,
     user,
     productID,
@@ -201,6 +220,12 @@ export class ProductImagesService extends PrismaBaseService<'productImage'> {
     productVariantID?: ProductVariant['id'];
     vendorID?: Vendor['id'];
   }) {
+    if (vendorID && productID) {
+      await this.productService.verifyProductOwnership({ productID, vendorID });
+    }
+    if (productID && productVariantID) {
+      await this.productVariantService.verifyVariantOwnership({ productVariantID, productID });
+    }
     for (const file of files) {
       this.eventEmitter.emit('product-images.upload', {
         file,
@@ -210,15 +235,20 @@ export class ProductImagesService extends PrismaBaseService<'productImage'> {
         vendorID,
       });
     }
-    return { message: 'Upload received, processing in background' };
+    return { message: 'Uploading images success' };
   }
 
   @OnEvent('product-images.upload')
-  async uploadProductImagesEvent(payload: UploadProductImagePayload) {
+  async uploadProductImagesEvent(
+    payload: UploadProductImagePayload & { vendorID?: string; productID?: string },
+  ) {
     const { file, user, productID, productVariantID, vendorID } = payload;
-    // Verify product thuộc vendor trước khi upload
+    // Nếu có vendorID + productID thì check quyền sở hữu product
     if (vendorID && productID) {
       await this.productService.verifyProductOwnership({ productID, vendorID });
+    }
+    if (productID && productVariantID) {
+      await this.productVariantService.verifyVariantOwnership({ productVariantID, productID });
     }
     const fileName = this.fileUtilService.removeFileExtension(file.originalname);
     const productImageExist = await this.getProductImage({ name: fileName });
