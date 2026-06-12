@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Prisma } from '@prisma/client';
+import { Prisma, ProductStatus } from '@prisma/client';
 import { UserInfo } from 'src/common/decorators/user.decorator';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { GetOptionsParams, Options } from '../../common/query/options.interface';
@@ -207,13 +207,69 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
     return data;
   }
 
-  // check xem product co thuoc vendor hay khong
-  async verifyProductOwnership({ productID, vendorID }: { productID: string; vendorID: string }) {
+  async verifyProductOwnership({
+    productID,
+    vendorID,
+  }: {
+    productID: Product['id'];
+    vendorID: Vendor['id'];
+  }) {
     const product = await this.extended.findFirst({
       where: { id: productID, vendorID },
     });
     if (!product)
       throw new NotFoundException('Product not found or does not belong to this vendor');
     return product;
+  }
+
+  async publishProduct({
+    productID,
+    vendorID,
+  }: {
+    productID: Product['id'];
+    vendorID: Vendor['id'];
+  }) {
+    await this.verifyProductOwnership({ productID, vendorID });
+    const [product, images, variants] = await Promise.all([
+      this.extended.findFirst({ where: { id: productID }, include: { productCategories: true } }),
+      this.prismaService.productImage.findFirst({ where: { productID } }),
+      this.prismaService.productVariant.findMany({ where: { productID } }),
+    ]);
+    const errors: string[] = [];
+    if (!product?.productCategories?.length) {
+      errors.push('Product must have at least one category');
+    }
+    if (!images) {
+      errors.push('Product must have at least one image');
+    }
+    if (variants.length > 0) {
+      // Check từng variant đều phải có ít nhất 1 ảnh
+      const variantImages = await this.prismaService.productImage.findMany({
+        where: { productVariantID: { in: variants.map((v) => v.id) } },
+        select: { productVariantID: true },
+      });
+      const variantIDsWithImages = new Set(variantImages.map((img) => img.productVariantID));
+      const variantsWithoutImage = variants.filter((v) => !variantIDsWithImages.has(v.id));
+      if (variantsWithoutImage.length > 0) {
+        errors.push(
+          `These variants must have at least one image: ${variantsWithoutImage.map((v) => v.name ?? v.id).join(', ')}`,
+        );
+      }
+      const hasStock = variants.some((v) => v.stockQuantity > 0);
+      if (!hasStock) {
+        errors.push('At least one variant must have stock quantity greater than 0');
+      }
+    } else {
+      if (!product?.stockQuantity || product.stockQuantity <= 0) {
+        errors.push('Product must have stock quantity greater than 0');
+      }
+    }
+    if (errors.length > 0) {
+      throw new BadRequestException(errors);
+    }
+    return this.extended.update({
+      where: { id: productID },
+      data: { status: ProductStatus.active },
+    });
   }
 }

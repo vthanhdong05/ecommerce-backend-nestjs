@@ -107,6 +107,14 @@ export class VendorProductsController {
     });
   }
 
+  @Patch('publish/:id')
+  publishProduct(
+    @Param(ProductParams.VENDOR_ID) vendorId: Vendor['id'],
+    @Param('id') id: Product['id'],
+  ) {
+    return this.productsService.publishProduct({ productID: id, vendorID: vendorId });
+  }
+
   @Delete(`:id`)
   deleteProduct(
     @Param(ProductParams.VENDOR_ID) vendorId: Vendor['id'],
