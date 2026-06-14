@@ -43,10 +43,9 @@ export class AuthService {
     const { email, password, ...otherInfo } = signUpDto;
     const user = await this.userService.getUser({ email });
     if (user) throw new BadRequestException('User already exist!');
-    const passwordHashed = await this.stringUtilService.hash(password);
     const userCreated = await this.userService.createUser({
       email,
-      password: passwordHashed,
+      password,
       ...otherInfo,
     });
     const { password: _password, ...userResponse } = userCreated;

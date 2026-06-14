@@ -1,6 +1,7 @@
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { Prisma, RoleType } from '@prisma/client';
+import { Actions } from 'src/common/guards/access-control/access-control.const';
 import { normalizeRoute } from 'src/common/utils/data-format/data-fomat.util';
 import { ExcelUtilService } from 'src/common/utils/excel-util/excel-util.service';
 import { StringUtilService } from 'src/common/utils/string-util/string-util.service';
@@ -13,7 +14,6 @@ import { CreateUserDto, ImportUsersDto } from './dto/create-user.dto';
 import { ExportUsersDto, GetUsersPaginationDto, IsExistPermissionKeyDto } from './dto/get-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
-import { Actions } from 'src/common/guards/access-control/access-control.const';
 
 @Injectable()
 export class UsersService extends PrismaBaseService<'user'> implements Options<User> {

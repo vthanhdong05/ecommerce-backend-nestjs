@@ -1,2 +1,2 @@
--- SELECT * FROM "Product"
-DELETE FROM "Product"
+-- SELECT * FROM "User"
+DELETE FROM "User"
