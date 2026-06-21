@@ -73,7 +73,7 @@ export class ProductVariantsService
     if (vendorID && productID) {
       await this.productService.verifyProductOwnership({ productID, vendorID });
     }
-    const where = { ...(productID && { productID }) };
+    const where = { ...(productID && { productID }), isDefault: false };
     const totalItems = await this.extended.count({ where });
     const paging = this.paginationUtilService.paging({
       page,
@@ -99,13 +99,18 @@ export class ProductVariantsService
         vendorID,
       });
     }
-    const data = await this.extended.create({
-      data: {
-        ...createProductVariantDto,
-        user,
-      } as any,
+    return this.prismaService.$transaction(async (tx) => {
+      await tx.productVariant.updateMany({
+        where: { productID: createProductVariantDto.productID, isDefault: true },
+        data: { deletedAt: new Date(), stockQuantity: 0 }, // ẩn khỏi findFirst/findMany (đã filter deletedAt: null mặc định), không cho bán tiếp
+      });
+      return tx.productVariant.create({
+        data: {
+          ...createProductVariantDto,
+          createdBy: user.userEmail,
+        } as any,
+      });
     });
-    return data;
   }
 
   async updateProductVariant(params: {
@@ -142,7 +147,7 @@ export class ProductVariantsService
     const fieldsSelect = this.queryUtil.convertFieldsSelectOption(select);
     return this.extended.findMany({
       select: fieldsSelect,
-      where: { ...searchFields, ...(productID && { productID }) },
+      where: { ...searchFields, ...(productID && { productID }), isDefault: false },
       take: Number(limit),
     });
   }
@@ -160,6 +165,7 @@ export class ProductVariantsService
         where: {
           ...(ids && { id: { in: ids } }),
           ...(productID && { productID }),
+          isDefault: false,
         },
       }),
       this.productService.client.findMany({

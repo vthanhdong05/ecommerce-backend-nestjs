@@ -8,7 +8,8 @@ export class ProductVariant implements ProductVariantPrisma {
   sku!: string | null;
   price!: Decimal;
   stockQuantity!: number;
-  attributes!: unknown;
+  attributes: unknown;
+  isDefault!: boolean;
   createdAt!: Date;
   createdBy!: string | null;
   updatedAt!: Date;

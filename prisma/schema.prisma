@@ -247,6 +247,7 @@ model ProductVariant {
   price         Decimal
   stockQuantity Int       @default(0)
   attributes    Json?
+  isDefault     Boolean   @default(false)
   createdAt     DateTime  @default(now())
   createdBy     String?
   updatedAt     DateTime  @updatedAt

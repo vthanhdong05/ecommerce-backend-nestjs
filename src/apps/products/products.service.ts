@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Prisma, ProductStatus } from '@prisma/client';
+import { Prisma, ProductStatus, ProductVariant } from '@prisma/client';
 import { UserInfo } from 'src/common/decorators/user.decorator';
+import { StringUtilService } from 'src/common/utils/string-util/string-util.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { GetOptionsParams, Options } from '../../common/query/options.interface';
 import { PrismaBaseService } from '../../common/services/prisma-base.service';
@@ -15,7 +16,6 @@ import { ExportProductsDto, GetProductsPaginationDto } from './dto/get-product.d
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Product } from './entities/product.entity';
 
-@Injectable()
 export class ProductsService extends PrismaBaseService<'product'> implements Options<Product> {
   private productEntityName = Product.name;
   private excelSheets = {
@@ -25,6 +25,7 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
     private excelUtilService: ExcelUtilService,
     public prismaService: PrismaService,
     private paginationUtilService: PaginationUtilService,
+    private stringUtilService: StringUtilService,
     private queryUtil: QueryUtilService,
     private vendorService: VendorsService,
     private eventEmitter: EventEmitter2,
@@ -74,14 +75,28 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
 
   async createProduct(createProductDto: CreateProductDto, user: UserInfo) {
     const { categoryIDs, ...productData } = createProductDto;
-    const data = await this.extended.create({
-      data: {
-        ...productData,
-        user,
-        productCategories: {
-          create: categoryIDs.map((categoryID) => ({ categoryID })),
+    const data = await this.prismaService.$transaction(async (tx) => {
+      const product = await tx.product.create({
+        data: {
+          ...productData,
+          slug: this.stringUtilService.toSlug(productData.name),
+          createdBy: user.userEmail,
+          productCategories: {
+            create: categoryIDs.map((categoryID) => ({ categoryID })),
+          },
+        } as any,
+      });
+      await tx.productVariant.create({
+        data: {
+          productID: product.id,
+          name: null,
+          price: product.price,
+          stockQuantity: product.stockQuantity,
+          isDefault: true,
+          createdBy: user.userEmail,
         },
-      } as any,
+      });
+      return product;
     });
     this.eventEmitter.emit('product.created', { vendorID: data.vendorID });
     return data;
@@ -99,11 +114,25 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
       });
       if (!product) throw new NotFoundException('Product not found');
     }
-    const data = await this.extended.update({
-      data: dataUpdate,
-      where: uniqueWhere,
+    return this.prismaService.$transaction(async (tx) => {
+      const data = await tx.product.update({
+        data: dataUpdate,
+        where: uniqueWhere,
+      });
+      // Đồng bộ giá/tồn kho xuống variant ẩn, vì OrderItem luôn lấy giá từ ProductVariant, không phải từ Product
+      if (dataUpdate.price !== undefined || dataUpdate.stockQuantity !== undefined) {
+        await tx.productVariant.updateMany({
+          where: { productID: uniqueWhere.id, isDefault: true },
+          data: {
+            ...(dataUpdate.price !== undefined && { price: dataUpdate.price }),
+            ...(dataUpdate.stockQuantity !== undefined && {
+              stockQuantity: dataUpdate.stockQuantity,
+            }),
+          },
+        });
+      }
+      return data;
     });
-    return data;
   }
 
   async getOptions(params: GetOptionsParams<Product>) {
@@ -162,17 +191,30 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
     const dataCreated = await this.excelUtilService.read(file);
     const rows = dataCreated[productSheetName];
     if (vendorID) {
-      const data = await this.extended.createMany({
-        data: rows.map(({ vendorName: _vendorName, ...rest }) => ({
-          ...rest,
-          vendorID,
-          user,
-        })),
+      return this.prismaService.$transaction(async (tx) => {
+        const createdProducts = await tx.product.createManyAndReturn({
+          data: rows.map(({ vendorName: _vendorName, ...rest }) => ({
+            ...rest,
+            slug: this.stringUtilService.toSlug(rest.name),
+            vendorID,
+            createdBy: user.userEmail,
+          })),
+        });
+        await tx.productVariant.createMany({
+          data: createdProducts.map((product) => ({
+            productID: product.id,
+            name: null,
+            price: product.price,
+            stockQuantity: product.stockQuantity,
+            isDefault: true,
+            createdBy: user.userEmail,
+          })),
+        });
+        this.eventEmitter.emit('product.imported', { vendorID, count: createdProducts.length });
+        return { count: createdProducts.length };
       });
-      // emit 1 lần với count
-      this.eventEmitter.emit('product.imported', { vendorID, count: data.count });
-      return data;
     }
+    // (Admin — import kèm vendorName)
     const vendorNames = [...new Set(rows.map((r) => r.vendorName))] as string[];
     const vendors = await this.vendorService.client.findMany({
       where: { name: { in: vendorNames } },
@@ -180,20 +222,38 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
     });
     const vendorMap = new Map(vendors.map((v) => [v.name, v.id]));
     const mappedRows = rows.map(({ vendorName, ...rest }) => {
-      const vendorID = vendorMap.get(vendorName);
-      if (!vendorID) throw new BadRequestException(`Vendor "${vendorName}" does not exist`);
-      return { ...rest, vendorID, user };
+      const resolvedVendorID = vendorMap.get(vendorName);
+      if (!resolvedVendorID) throw new BadRequestException(`Vendor "${vendorName}" does not exist`);
+      return { ...rest, vendorID: resolvedVendorID };
     });
-    const data = await this.extended.createMany({ data: mappedRows });
-    // Emit theo từng vendor
-    const vendorCounts = mappedRows.reduce<Record<string, number>>((acc, row) => {
-      acc[row.vendorID] = (acc[row.vendorID] ?? 0) + 1;
+    const data = await this.prismaService.$transaction(async (tx) => {
+      const createdProducts = await tx.product.createManyAndReturn({
+        data: mappedRows.map((row) => ({
+          ...row,
+          slug: this.stringUtilService.toSlug(row.name),
+          createdBy: user.userEmail,
+        })),
+      });
+      await tx.productVariant.createMany({
+        data: createdProducts.map((product) => ({
+          productID: product.id,
+          name: null,
+          price: product.price,
+          stockQuantity: product.stockQuantity,
+          isDefault: true,
+          createdBy: user.userEmail,
+        })),
+      });
+      return createdProducts;
+    });
+    const vendorCounts = data.reduce<Record<string, number>>((acc, product) => {
+      acc[product.vendorID] = (acc[product.vendorID] ?? 0) + 1;
       return acc;
     }, {});
     for (const [vID, count] of Object.entries(vendorCounts)) {
       this.eventEmitter.emit('product.imported', { vendorID: vID, count });
     }
-    return data;
+    return { count: data.length };
   }
 
   async deleteProduct(where: Prisma.ProductWhereUniqueInput & { vendorID?: Vendor['id'] }) {
@@ -202,7 +262,23 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
       where: { id: uniqueWhere.id, ...(vendorID && { vendorID }) },
     });
     if (!product) throw new NotFoundException('Product not found');
-    const data = await this.extended.softDelete(uniqueWhere);
+    const data = await this.prismaService.$transaction(async (tx) => {
+      const deletedProduct = await tx.product.updateMany({
+        where: { id: uniqueWhere.id },
+        data: { deletedAt: new Date() },
+      });
+      // Cascade soft-delete xuống variant con — tránh việc variant của product đã xóa vẫn mua được
+      await tx.productVariant.updateMany({
+        where: { productID: uniqueWhere.id },
+        data: { deletedAt: new Date() },
+      });
+      // Cascade soft-delete xuống ảnh con — tránh ảnh "mồ côi" vẫn còn hiển thị ở nơi khác
+      await tx.productImage.updateMany({
+        where: { productID: uniqueWhere.id },
+        data: { deletedAt: new Date() },
+      });
+      return deletedProduct;
+    });
     this.eventEmitter.emit('product.deleted', { vendorID: product.vendorID });
     return data;
   }
@@ -233,7 +309,9 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
     const [product, images, variants] = await Promise.all([
       this.extended.findFirst({ where: { id: productID }, include: { productCategories: true } }),
       this.prismaService.productImage.findFirst({ where: { productID } }),
-      this.prismaService.productVariant.findMany({ where: { productID } }),
+      this.prismaService.productVariant.findMany({ where: { productID } }) as Promise<
+        ProductVariant[]
+      >,
     ]);
     const errors: string[] = [];
     if (!product?.productCategories?.length) {
@@ -242,25 +320,29 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
     if (!images) {
       errors.push('Product must have at least one image');
     }
-    if (variants.length > 0) {
-      // Check từng variant đều phải có ít nhất 1 ảnh
+    // Luôn có ít nhất 1 variant (ẩn hoặc thật) -> bỏ hẳn nhánh else cũ
+    const realVariants = variants.filter((variant) => !variant.isDefault);
+    if (realVariants.length > 0) {
+      // Có variant thật -> check ảnh + stock như cũ, chỉ áp dụng cho variant thật
       const variantImages = await this.prismaService.productImage.findMany({
-        where: { productVariantID: { in: variants.map((v) => v.id) } },
+        where: { productVariantID: { in: realVariants.map((variant) => variant.id) } },
         select: { productVariantID: true },
       });
       const variantIDsWithImages = new Set(variantImages.map((img) => img.productVariantID));
-      const variantsWithoutImage = variants.filter((v) => !variantIDsWithImages.has(v.id));
+      const variantsWithoutImage = realVariants.filter((v) => !variantIDsWithImages.has(v.id));
       if (variantsWithoutImage.length > 0) {
         errors.push(
-          `These variants must have at least one image: ${variantsWithoutImage.map((v) => v.name ?? v.id).join(', ')}`,
+          `These variants must have at least one image: ${variantsWithoutImage.map((variant) => variant.name ?? variant.id).join(', ')}`,
         );
       }
-      const hasStock = variants.some((v) => v.stockQuantity > 0);
+      const hasStock = realVariants.some((variant) => variant.stockQuantity > 0);
       if (!hasStock) {
         errors.push('At least one variant must have stock quantity greater than 0');
       }
     } else {
-      if (!product?.stockQuantity || product.stockQuantity <= 0) {
+      // Chỉ có variant ẩn -> check stock của Product gốc (ảnh chung của Product đã check ở trên rồi)
+      const defaultVariant = variants[0];
+      if (!defaultVariant || defaultVariant.stockQuantity <= 0) {
         errors.push('Product must have stock quantity greater than 0');
       }
     }
