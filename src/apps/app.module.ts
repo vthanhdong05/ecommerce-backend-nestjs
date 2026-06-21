@@ -27,6 +27,7 @@ import { AppService } from './app.service';
 import { AuthGuard } from './auth/auth.guard';
 import { AuthModule } from './auth/auth.module';
 import { CategoriesModule } from './categories/categories.module';
+import { OrderAddressesModule } from './order-addresses/order-addresses.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { ProductCategoriesModule } from './product-categories/product-categories.module';
 import { ProductImagesModule } from './product-images/product-images.module';
@@ -37,7 +38,7 @@ import { RolesModule } from './roles/roles.module';
 import { UserSystemRolesModule } from './user-system-role/user-system-roles.module';
 import { UsersModule } from './users/users.module';
 import { VendorsModule } from './vendors/vendors.module';
-import { OrderAddressesModule } from './order-addresses/order-addresses.module';
+import { OrderItemsModule } from './order-items/order-items.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { OrderAddressesModule } from './order-addresses/order-addresses.module';
     ProductVariantsModule,
     ProductCategoriesModule,
     OrderAddressesModule,
+    OrderItemsModule,
   ],
   controllers: [AppController],
   providers: [
