@@ -24,8 +24,11 @@ export class OrderAddressesService extends PrismaBaseService<'orderAddress'> {
     return data;
   }
 
-  async createOrderAddress(createOrderAddressDto: CreateOrderAddressDto) {
-    const data = await this.extended.create({
+  async createOrderAddress(
+    createOrderAddressDto: CreateOrderAddressDto,
+    tx: Prisma.TransactionClient,
+  ) {
+    const data = await tx.orderAddress.create({
       data: createOrderAddressDto,
     });
     return data;

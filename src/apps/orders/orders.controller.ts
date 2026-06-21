@@ -1,57 +1,39 @@
 import {
+  Body,
   Controller,
   Get,
-  Post,
-  Body,
-  Delete,
-  UsePipes,
-  Query,
   Param,
-  UseInterceptors,
-  UploadedFile,
   Patch,
+  Post,
+  Query,
   Res,
+  UseInterceptors,
+  UsePipes,
 } from '@nestjs/common';
-import { CreateOrderDto } from './dto/create-order.dto';
-import { UpdateOrderDto } from './dto/update-order.dto';
-import { ExportOrdersDto, GetOrdersPaginationDto } from './dto/get-order.dto';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { ExcelResponseInterceptor } from '../../common/interceptors/excel-response/excel-response.interceptor';
 import { Order } from '@prisma/client';
-import { OrdersService } from './orders.service';
-import { User } from '../../common/decorators/user.decorator';
-import type { UserInfo } from '../../common/decorators/user.decorator';
 import type { Response } from 'express';
-import type { File } from '../../common/utils/excel-util/dto/excel-util.interface';
-import type { GetOptionsParams } from '../../common/query/options.interface';
+import type { UserInfo } from '../../common/decorators/user.decorator';
+import { User } from '../../common/decorators/user.decorator';
+import { ExcelResponseInterceptor } from '../../common/interceptors/excel-response/excel-response.interceptor';
 import { ParseParamsPaginationPipe } from '../../common/pipes/parse-params-pagination.pipe';
+import { CreateOrderDto } from './dto/create-order.dto';
+import { ExportOrdersDto, GetOrdersPaginationDto } from './dto/get-order.dto';
+import { UpdateOrderDto } from './dto/update-order.dto';
+import { OrdersService } from './orders.service';
 
 @Controller('orders')
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
   @Post()
-  createOrder(@Body() createDto: CreateOrderDto, @User() user) {
-    return this.ordersService.createOrder({ ...createDto, user });
-  }
-
-  @Patch(':id')
-  updateOrder(@Param('id') id: Order['id'], @Body() updateOrderDto: UpdateOrderDto) {
-    return this.ordersService.updateOrder({
-      data: updateOrderDto,
-      where: { id },
-    });
+  createOrder(@Body() createDto: CreateOrderDto, @User() user: UserInfo) {
+    return this.ordersService.createOrder(createDto, user);
   }
 
   @Get()
   @UsePipes(ParseParamsPaginationPipe)
-  getOrders(@Query() query: GetOrdersPaginationDto) {
-    return this.ordersService.getOrders(query);
-  }
-
-  @Get('options')
-  getOrderOptions(@Query() query: GetOptionsParams<Order>) {
-    return this.ordersService.getOptions(query);
+  getOrders(@Query() query: GetOrdersPaginationDto, @User() user: UserInfo) {
+    return this.ordersService.getOrders({ ...query, userID: user.userID });
   }
 
   @Get('export')
@@ -63,19 +45,22 @@ export class OrdersController {
     return { message: 'Export success' };
   }
 
-  @Post('import')
-  @UseInterceptors(FileInterceptor('file'))
-  importOrders(@UploadedFile() file: File, @User() user: UserInfo) {
-    return this.ordersService.importOrders({ file, user });
-  }
-
   @Get(':id')
-  getOrder(@Param('id') id: Order['id']) {
-    return this.ordersService.getOrder({ id });
+  getOrder(@Param('id') id: Order['id'], @User() user: UserInfo) {
+    return this.ordersService.getOrder({ id, userID: user.userID });
   }
 
-  @Delete(':id')
-  deleteOrder(@Param('id') id: Order['id']) {
-    return this.ordersService.deleteOrder({ id });
+  @Patch(':id')
+  updateOrder(
+    @Param('id') id: Order['id'],
+    @Body() updateOrderDto: UpdateOrderDto,
+    @User() user: UserInfo,
+  ) {
+    return this.ordersService.updateOrder({ id, userID: user.userID, data: updateOrderDto });
+  }
+
+  @Patch(':id/cancel')
+  cancelOrder(@Param('id') id: Order['id'], @User() user: UserInfo) {
+    return this.ordersService.cancelOrder({ id, userID: user.userID });
   }
 }

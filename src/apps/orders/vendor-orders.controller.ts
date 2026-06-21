@@ -4,7 +4,7 @@ import { ParseParamsPaginationPipe } from 'src/common/pipes/parse-params-paginat
 import { Vendor } from '../vendors/entities/vendor.entity';
 import { VendorOrderParam } from './const/vendor-order.const';
 import { GetOrdersPaginationDto } from './dto/get-order.dto';
-import { UpdateOrderDto } from './dto/update-order.dto';
+import { UpdateVendorOrderStatusDto } from './dto/update-vendor-order-status.dto';
 import { OrdersService } from './orders.service';
 
 @Controller(`vendors/:${VendorOrderParam.VENDOR_ID_PARAM}/orders`)
@@ -20,7 +20,7 @@ export class VendorOrdersController {
     return this.ordersService.getVendorOrders({ ...query, vendorID: vendorId });
   }
 
-  @Get(`:id`)
+  @Get(':id')
   getVendorOrder(
     @Param(VendorOrderParam.VENDOR_ID_PARAM) vendorId: Vendor['id'],
     @Param('id') id: Order['id'],
@@ -28,16 +28,16 @@ export class VendorOrdersController {
     return this.ordersService.getVendorOrder({ id, vendorID: vendorId });
   }
 
-  @Patch(`:id`)
-  updateVendorOrder(
+  @Patch(':id/status')
+  updateVendorOrderStatus(
     @Param(VendorOrderParam.VENDOR_ID_PARAM) vendorId: Vendor['id'],
     @Param('id') id: Order['id'],
-    @Body() updateOrderDto: UpdateOrderDto,
+    @Body() updateStatusDto: UpdateVendorOrderStatusDto,
   ) {
-    return this.ordersService.updateVendorOrder({
+    return this.ordersService.updateVendorOrderStatus({
       id,
       vendorID: vendorId,
-      data: updateOrderDto,
+      status: updateStatusDto.status,
     });
   }
 }

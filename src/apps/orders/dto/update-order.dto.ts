@@ -1,9 +1,10 @@
-import { PartialType } from '@nestjs/swagger';
-import { CreateOrderDto } from './create-order.dto';
-import { IntersectionType, PickType } from '@nestjs/mapped-types';
-import { Order } from '../entities/order.entity';
+import { createZodDto } from 'nestjs-zod';
+import z from 'zod';
 
-export class UpdateOrderDto extends IntersectionType(
-  PartialType(CreateOrderDto),
-  PickType(Order, ['id']),
-) {}
+// Chỉ cho phép sửa notes sau khi đơn đã tạo — không cho sửa items/address/giá
+// Đổi status phải qua endpoint riêng (cancelOrder / updateVendorOrderStatus), không qua DTO này
+export const UpdateOrderSchema = z.object({
+  notes: z.string().trim().optional().nullable(),
+});
+
+export class UpdateOrderDto extends createZodDto(UpdateOrderSchema) {}

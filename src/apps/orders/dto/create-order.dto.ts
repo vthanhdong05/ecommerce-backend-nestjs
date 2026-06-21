@@ -1,34 +1,29 @@
-import { $Enums, Prisma } from '@prisma/client';
-import { DecimalJsLike } from '@prisma/client/runtime/library';
-import { ImportExcel } from '../../../common/utils/excel-util/excel-util.const';
+import { createZodDto } from 'nestjs-zod';
+import z from 'zod';
 
-class CreateOrderDto implements Prisma.OrderCreateInput {
-  id?: string | undefined;
-  orderNumber!: string;
-  status?: $Enums.OrderStatus | undefined;
-  subtotal!: string | number | Prisma.Decimal | DecimalJsLike;
-  taxAmount?: string | number | Prisma.Decimal | DecimalJsLike | undefined;
-  shippingAmount?: string | number | Prisma.Decimal | DecimalJsLike | undefined;
-  discountAmount?: string | number | Prisma.Decimal | DecimalJsLike | undefined;
-  totalAmount!: string | number | Prisma.Decimal | DecimalJsLike;
-  currency?: string | undefined;
-  notes?: string | null | undefined;
-  shippedAt?: string | Date | null | undefined;
-  deliveredAt?: string | Date | null | undefined;
-  createdAt?: string | Date | undefined;
-  createdBy?: string | null | undefined;
-  updatedAt?: string | Date | undefined;
-  deletedAt?: string | Date | null | undefined;
-  user!: Prisma.UserCreateNestedOneWithoutOrdersInput;
-  // orderItems?: Prisma.OrderItemCreateNestedManyWithoutOrderInput | undefined;
-  // orderAddresses?:
-  //   | Prisma.OrderAddressCreateNestedManyWithoutOrderInput
-  //   | undefined;
-  // orderPromotions?:
-  //   | Prisma.OrderPromotionCreateNestedManyWithoutOrderInput
-  //   | undefined;
-}
+// 1 item muốn mua — Service tự lấy giá thật từ ProductVariant trong DB, không tin giá client gửi
+const OrderItemInputSchema = z.object({
+  productVariantID: z.string().uuid({ message: 'Invalid product variant id' }),
+  quantity: z.coerce.number().int().positive({ message: 'Quantity must be greater than 0' }),
+});
 
-class ImportOrdersDto extends ImportExcel {}
+// Địa chỉ giao hàng — optional, không gửi thì Service lấy mặc định từ User profile
+const OrderAddressInputSchema = z.object({
+  firstName: z.string().trim().min(1),
+  lastName: z.string().trim().optional().nullable(),
+  company: z.string().trim().optional().nullable(),
+  fullAddress: z.string().trim().min(1),
+  city: z.string().trim().optional().nullable(),
+  province: z.string().trim().optional().nullable(),
+  country: z.string().trim().optional().nullable(),
+  phone: z.string().trim().min(1),
+});
 
-export { CreateOrderDto, ImportOrdersDto };
+export const CreateOrderSchema = z.object({
+  items: z.array(OrderItemInputSchema).min(1, { message: 'At least one item is required' }),
+  shippingAddress: OrderAddressInputSchema.optional(),
+  promotionCode: z.string().trim().optional(),
+  notes: z.string().trim().optional().nullable(),
+});
+
+export class CreateOrderDto extends createZodDto(CreateOrderSchema) {}

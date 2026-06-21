@@ -1,27 +1,35 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { OrderItem, OrderStatus, Prisma } from '@prisma/client';
+import { UserInfo } from 'src/common/decorators/user.decorator';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { GetOptionsParams, Options } from '../../common/query/options.interface';
 import { PrismaBaseService } from '../../common/services/prisma-base.service';
 import { ExcelUtilService } from '../../common/utils/excel-util/excel-util.service';
 import { PaginationUtilService } from '../../common/utils/pagination-util/pagination-util.service';
-import { QueryUtilService } from '../../common/utils/query-util/query-util.service';
-import { CreateOrderDto, ImportOrdersDto } from './dto/create-order.dto';
+import { StringUtilService } from '../../common/utils/string-util/string-util.service';
+import { OrderAddressesService } from '../order-addresses/order-addresses.service';
+import { OrderItemsService } from '../order-items/order-items.service';
+import { ALLOWED_VENDOR_STATUS_TRANSITIONS } from './const/order-status-transition.const';
+import { CreateOrderDto } from './dto/create-order.dto';
 import { ExportOrdersDto, GetOrdersPaginationDto } from './dto/get-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { Order } from './entities/order.entity';
 
 @Injectable()
-export class OrdersService extends PrismaBaseService<'order'> implements Options<Order> {
+export class OrdersService extends PrismaBaseService<'order'> {
   private orderEntityName = Order.name;
   private excelSheets = {
     [this.orderEntityName]: this.orderEntityName,
   };
+
   constructor(
     private excelUtilService: ExcelUtilService,
     public prismaService: PrismaService,
     private paginationUtilService: PaginationUtilService,
-    private queryUtil: QueryUtilService,
+    private stringUtilService: StringUtilService,
+    private orderItemsService: OrderItemsService,
+    private orderAddressesService: OrderAddressesService,
+    private eventEmitter: EventEmitter2,
   ) {
     super(prismaService, 'order');
   }
@@ -34,156 +42,189 @@ export class OrdersService extends PrismaBaseService<'order'> implements Options
     return super.extended;
   }
 
-  async getOrder(where: Prisma.OrderWhereUniqueInput) {
-    const data = await this.extended.findUnique({
-      where,
+  // (User xem đơn của chính mình — bắt buộc check ownership)
+  async getOrder({ id, userID }: { id: string; userID: string }) {
+    const data = await this.extended.findFirst({
+      where: { id, userID },
+      include: { orderItems: true, orderAddresses: true },
     });
+    if (!data) throw new NotFoundException('Order not found');
     return data;
   }
 
-  // (Lấy 1 order của vendor)
+  // (Vendor xem 1 đơn — chỉ thấy items thuộc vendor mình)
   async getVendorOrder({ id, vendorID }: { id: string; vendorID: string }) {
-    return this.extended.findFirst({
-      where: {
-        id,
-        orderItems: { some: { vendorID } },
-      },
-      include: {
-        orderItems: {
-          where: { vendorID }, // (chỉ lấy items của vendor)
-        },
-      },
+    const data = await this.extended.findFirst({
+      where: { id, orderItems: { some: { vendorID } } },
+      include: { orderItems: { where: { vendorID } } },
     });
+    if (!data) throw new NotFoundException('Order not found');
+    return data;
   }
 
-  async getOrders({ page, itemPerPage }: GetOrdersPaginationDto) {
-    const totalItems = await this.extended.count();
-    const paging = this.paginationUtilService.paging({
-      page,
-      itemPerPage,
-      totalItems,
-    });
+  async getOrders({ page, itemPerPage, userID }: GetOrdersPaginationDto & { userID: string }) {
+    const where = { userID };
+    const totalItems = await this.extended.count({ where });
+    const paging = this.paginationUtilService.paging({ page, itemPerPage, totalItems });
     const list = await this.extended.findMany({
+      where,
       skip: paging.skip,
       take: itemPerPage,
     });
-    const data = paging.format(list);
-    return data;
+    return paging.format(list);
   }
 
-  // (Lấy orders của vendor có phân trang)
   async getVendorOrders({
     vendorID,
     page,
     itemPerPage,
   }: GetOrdersPaginationDto & { vendorID: string }) {
-    const where: Prisma.OrderWhereInput = {
-      orderItems: { some: { vendorID } }, // (filter order có item của vendor)
-    };
+    const where: Prisma.OrderWhereInput = { orderItems: { some: { vendorID } } };
     const totalItems = await this.extended.count({ where });
-    const paging = this.paginationUtilService.paging({
-      page,
-      itemPerPage,
-      totalItems,
-    });
+    const paging = this.paginationUtilService.paging({ page, itemPerPage, totalItems });
     const list = await this.extended.findMany({
       where,
       skip: paging.skip,
       take: itemPerPage,
-      include: {
-        orderItems: {
-          where: { vendorID }, // (chỉ lấy items của vendor đó)
-        },
-      },
+      include: { orderItems: { where: { vendorID } } },
     });
     return paging.format(list);
   }
 
-  async createOrder(createOrderDto: CreateOrderDto) {
-    const data = await this.extended.create({
-      data: createOrderDto,
+  // (Tạo đơn — lõi của cả module: items + address + tính tiền, tất cả trong 1 transaction)
+  async createOrder(createOrderDto: CreateOrderDto, user: UserInfo) {
+    const { items, shippingAddress, notes } = createOrderDto;
+    // TODO: promotionCode — chưa xử lý vì PromotionsModule chưa được implement, note backlog
+    const order = await this.prismaService.$transaction(async (tx) => {
+      // 1. Tạo Order rỗng trước (chưa biết tổng tiền), để có orderID gắn cho item/address
+      const newOrder = await tx.order.create({
+        data: {
+          orderNumber: this.generateOrderNumber(),
+          userID: user.userID,
+          status: OrderStatus.pending,
+          subtotal: 0,
+          totalAmount: 0,
+          notes,
+          createdBy: user.userEmail,
+        },
+      });
+      // 2. Tạo từng OrderItem — tự validate stock, tự tính giá, tự trừ kho (throw lỗi -> rollback toàn bộ)
+      const orderItems: OrderItem[] = [];
+      for (const item of items) {
+        const orderItem = await this.orderItemsService.createOrderItem(
+          {
+            orderID: newOrder.id,
+            productVariantID: item.productVariantID,
+            quantity: item.quantity,
+          },
+          tx,
+        );
+        orderItems.push(orderItem);
+      }
+      // 3. Resolve địa chỉ giao hàng — dùng body nếu có, không thì fallback User profile
+      const resolvedAddress =
+        shippingAddress ?? (await this.resolveAddressFromUserProfile(user.userID, tx));
+      await this.orderAddressesService.createOrderAddress(
+        { orderID: newOrder.id, type: 'shipping', ...resolvedAddress },
+        tx,
+      );
+
+      // 4. Tính lại tổng tiền từ các OrderItem vừa tạo
+      const subtotal = orderItems.reduce((sum, item) => sum + Number(item.totalPrice), 0);
+      const totalAmount = subtotal; // chưa có taxAmount/shippingAmount/discountAmount thật — note backlog khi có Promotion/Shipping
+      return tx.order.update({
+        where: { id: newOrder.id },
+        data: { subtotal, totalAmount },
+      });
     });
-    return data;
+    this.eventEmitter.emit('order.created', { orderID: order.id, userID: user.userID });
+    return order;
+  }
+  private generateOrderNumber(): string {
+    const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    return `ORD-${datePart}-${this.stringUtilService.random(6).toUpperCase()}`;
+  }
+  private async resolveAddressFromUserProfile(userID: string, tx: Prisma.TransactionClient) {
+    const user = await tx.user.findUnique({ where: { id: userID } });
+    if (!user?.fullAddress || !user?.phone) {
+      throw new BadRequestException(
+        'Please provide a shipping address or update your profile address',
+      );
+    }
+    return {
+      firstName: user.firstName ?? '',
+      lastName: user.lastName,
+      fullAddress: user.fullAddress,
+      city: user.city,
+      province: user.province,
+      country: user.country,
+      phone: user.phone,
+    };
   }
 
-  async updateOrder(params: { where: Prisma.OrderWhereUniqueInput; data: UpdateOrderDto }) {
-    const { where, data: dataUpdate } = params;
-    const data = await this.extended.update({
-      data: dataUpdate,
-      where,
-    });
-    return data;
+  // (User tự sửa — chỉ cho phép sửa notes, có ownership check)
+  async updateOrder({ id, userID, data }: { id: string; userID: string; data: UpdateOrderDto }) {
+    const order = await this.extended.findFirst({ where: { id, userID } });
+    if (!order) throw new NotFoundException('Order not found');
+    return this.extended.update({ where: { id }, data });
   }
 
-  // (Vendor update status order)
-  async updateVendorOrder({
+  // (Vendor cập nhật status — theo đúng state machine, không nhảy cóc)
+  async updateVendorOrderStatus({
     id,
     vendorID,
-    data,
+    status,
   }: {
     id: string;
     vendorID: string;
-    data: UpdateOrderDto;
+    status: OrderStatus;
   }) {
-    // (Verify order có chứa item của vendor không)
     const order = await this.extended.findFirst({
-      where: {
-        id,
-        orderItems: { some: { vendorID } },
-      },
+      where: { id, orderItems: { some: { vendorID } } },
     });
     if (!order) throw new NotFoundException('Order not found');
-    return this.extended.update({
-      where: { id },
-      data,
-    });
+    const allowedNextStatuses = ALLOWED_VENDOR_STATUS_TRANSITIONS[order.status] ?? [];
+    if (!allowedNextStatuses.includes(status)) {
+      throw new BadRequestException(
+        `Cannot change order status from "${order.status}" to "${status}"`,
+      );
+    }
+    const updateData: Prisma.OrderUpdateInput = { status };
+    if (status === OrderStatus.shipped) updateData.shippedAt = new Date();
+    if (status === OrderStatus.delivered) updateData.deliveredAt = new Date();
+    return this.extended.update({ where: { id }, data: updateData });
   }
 
-  async getOptions(params: GetOptionsParams<Order>) {
-    const { limit, select, ...searchFields } = params;
-    const fieldsSelect = this.queryUtil.convertFieldsSelectOption(select);
-    const data = await this.extended.findMany({
-      select: fieldsSelect,
-      where: {
-        ...searchFields,
-      },
-      take: Number(limit),
+  // (Hủy đơn — chỉ khi pending/confirmed, hoàn lại kho)
+  async cancelOrder({ id, userID }: { id: string; userID: string }) {
+    const order = await this.extended.findFirst({
+      where: { id, userID },
+      include: { orderItems: true },
     });
-    return data;
+    if (!order) throw new NotFoundException('Order not found');
+    const cancellableStatuses: OrderStatus[] = [OrderStatus.pending, OrderStatus.confirmed];
+    if (!cancellableStatuses.includes(order.status)) {
+      throw new BadRequestException(`Cannot cancel an order with status "${order.status}"`);
+    }
+    return this.prismaService.$transaction(async (tx) => {
+      // Hoàn lại stock cho từng item
+      for (const item of order.orderItems) {
+        await tx.productVariant.update({
+          where: { id: item.productVariantID },
+          data: { stockQuantity: { increment: item.quantity } },
+        });
+      }
+      return tx.order.update({
+        where: { id },
+        data: { status: OrderStatus.cancelled },
+      });
+    });
   }
 
   async exportOrders({ ids }: ExportOrdersDto) {
-    const orders = await this.extended.export({
-      where: {
-        id: { in: ids },
-      },
+    const orders = await this.extended.export({ where: { id: { in: ids } } });
+    return this.excelUtilService.generateExcel({
+      worksheets: [{ sheetName: this.excelSheets[this.orderEntityName], data: orders }],
     });
-    const data = this.excelUtilService.generateExcel({
-      worksheets: [
-        {
-          sheetName: this.excelSheets[this.orderEntityName],
-          data: orders,
-        },
-      ],
-    });
-
-    return data;
-  }
-
-  async importOrders({ file, user }: ImportOrdersDto) {
-    const orderSheetName = this.excelSheets[this.orderEntityName];
-    const dataCreated = await this.excelUtilService.read(file);
-    const data = await this.extended.createMany({
-      data: dataCreated[orderSheetName].map((item) => ({
-        ...item,
-        user,
-      })),
-    });
-    return data;
-  }
-
-  async deleteOrder(where: Prisma.OrderWhereUniqueInput) {
-    const data = await this.extended.softDelete(where);
-    return data;
   }
 }
