@@ -181,4 +181,12 @@ export class VendorsService extends PrismaBaseService<'vendor'> implements Optio
       data: { totalProducts: { increment: count } },
     });
   }
+
+  @OnEvent('order.created')
+  async onOrderCreated({ vendorIDs }: { orderID: string; userID: string; vendorIDs: string[] }) {
+    await this.extended.updateMany({
+      where: { id: { in: vendorIDs } },
+      data: { totalOrders: { increment: 1 } },
+    });
+  }
 }

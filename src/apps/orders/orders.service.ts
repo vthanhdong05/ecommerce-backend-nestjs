@@ -95,7 +95,7 @@ export class OrdersService extends PrismaBaseService<'order'> {
   async createOrder(createOrderDto: CreateOrderDto, user: UserInfo) {
     const { items, shippingAddress, notes } = createOrderDto;
     // TODO: promotionCode — chưa xử lý vì PromotionsModule chưa được implement, note backlog
-    const order = await this.prismaService.$transaction(async (tx) => {
+    const { order, orderItems } = await this.prismaService.$transaction(async (tx) => {
       // 1. Tạo Order rỗng trước (chưa biết tổng tiền), để có orderID gắn cho item/address
       const newOrder = await tx.order.create({
         data: {
@@ -128,16 +128,19 @@ export class OrdersService extends PrismaBaseService<'order'> {
         { orderID: newOrder.id, type: 'shipping', ...resolvedAddress },
         tx,
       );
-
       // 4. Tính lại tổng tiền từ các OrderItem vừa tạo
       const subtotal = orderItems.reduce((sum, item) => sum + Number(item.totalPrice), 0);
       const totalAmount = subtotal; // chưa có taxAmount/shippingAmount/discountAmount thật — note backlog khi có Promotion/Shipping
-      return tx.order.update({
+
+      const updatedOrder = await tx.order.update({
         where: { id: newOrder.id },
         data: { subtotal, totalAmount },
       });
+      return { order: updatedOrder, orderItems };
     });
-    this.eventEmitter.emit('order.created', { orderID: order.id, userID: user.userID });
+    // 5. Sau khi transaction commit thành công — emit event cho các việc phụ (cập nhật totalOrders của từng vendor, gửi email...)
+    const vendorIDs = [...new Set(orderItems.map((item) => item.vendorID))];
+    this.eventEmitter.emit('order.created', { orderID: order.id, userID: user.userID, vendorIDs });
     return order;
   }
   private generateOrderNumber(): string {
