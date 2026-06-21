@@ -1,13 +1,13 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { AutoMockingModule } from 'src/testing/auto-mocking/auto-mocking.module';
 import { CreateOrderItemDto } from './dto/create-order-item.dto';
 import { OrderItemsService } from './order-items.service';
-import { AutoMockingModule } from 'src/testing/auto-mocking/auto-mocking.module';
 
 describe('OrderItemsService', () => {
   let service: OrderItemsService;
 
   const mockExtended = {
-    findUnique: jest.fn(),
+    findFirst: jest.fn(), // đổi từ findUnique
   };
 
   // mock cho Prisma.TransactionClient (tx) truyền vào createOrderItem
@@ -27,29 +27,28 @@ describe('OrderItemsService', () => {
     });
 
     service = moduleRef.get(OrderItemsService);
-
     jest.spyOn(service, 'extended', 'get').mockReturnValue(mockExtended as any);
 
     jest.clearAllMocks();
   });
 
   describe('getOrderItem', () => {
-    it('should call findUnique with correct where and return the result', async () => {
+    it('should call findFirst with userID condition and return the result', async () => {
       const mockData = { id: 'item-1', orderID: 'order-1', quantity: 2 };
-      mockExtended.findUnique.mockResolvedValue(mockData);
+      mockExtended.findFirst.mockResolvedValue(mockData);
 
-      const result = await service.getOrderItem({ id: 'item-1' });
+      const result = await service.getOrderItem({ id: 'item-1', userID: 'user-1' });
 
-      expect(mockExtended.findUnique).toHaveBeenCalledWith({ where: { id: 'item-1' } });
+      expect(mockExtended.findFirst).toHaveBeenCalledWith({
+        where: { id: 'item-1', order: { userID: 'user-1' } },
+      });
       expect(result).toEqual(mockData);
     });
 
-    it('should return null when no record is found', async () => {
-      mockExtended.findUnique.mockResolvedValue(null);
+    it('should throw NotFoundException when no record is found', async () => {
+      mockExtended.findFirst.mockResolvedValue(null);
 
-      const result = await service.getOrderItem({ id: 'not-exist' });
-
-      expect(result).toBeNull();
+      await expect(service.getOrderItem({ id: 'not-exist' })).rejects.toThrow(NotFoundException);
     });
   });
 

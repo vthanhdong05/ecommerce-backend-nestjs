@@ -6,11 +6,17 @@ import { OrderAddressesService } from './order-addresses.service';
 describe('OrderAddressesService', () => {
   let service: OrderAddressesService;
 
-  // mock sẵn các method của Prisma model `orderAddress` mà Service gọi qua `this.extended`
+  // mock cho this.extended — dùng cho getOrderAddress, updateOrderAddress
   const mockExtended = {
     findUnique: jest.fn(),
-    create: jest.fn(),
     update: jest.fn(),
+  };
+
+  // mock cho tx (Prisma.TransactionClient) — dùng cho createOrderAddress, vì hàm này chạy trong transaction của OrdersService
+  const mockTx = {
+    orderAddress: {
+      create: jest.fn(),
+    },
   };
 
   beforeEach(async () => {
@@ -20,7 +26,6 @@ describe('OrderAddressesService', () => {
 
     service = moduleRef.get(OrderAddressesService);
 
-    // Service dùng `this.extended` (getter) để gọi prisma — override getter để trả về mock thay vì PrismaClient thật
     jest.spyOn(service, 'extended', 'get').mockReturnValue(mockExtended as any);
 
     jest.clearAllMocks();
@@ -57,11 +62,11 @@ describe('OrderAddressesService', () => {
       };
 
       const mockCreated = { id: 'addr-1', ...dto };
-      mockExtended.create.mockResolvedValue(mockCreated);
+      mockTx.orderAddress.create.mockResolvedValue(mockCreated);
 
-      const result = await service.createOrderAddress(dto);
+      const result = await service.createOrderAddress(dto, mockTx as any);
 
-      expect(mockExtended.create).toHaveBeenCalledWith({ data: dto });
+      expect(mockTx.orderAddress.create).toHaveBeenCalledWith({ data: dto });
       expect(result).toEqual(mockCreated);
     });
   });
