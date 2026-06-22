@@ -71,11 +71,15 @@ enum PromotionStatus {
   expired
 }
 
+enum PromotionScope {
+  ORDER    
+  SHIPPING 
+}
+
 enum PromotionType {
-  percentage
-  fixed_amount
-  free_shipping
-  buy_x_get_y
+  percentage   
+  fixed_amount  
+  buy_x_get_y   
 }
 model User {
   id          String     @id @default(uuid())
@@ -349,6 +353,7 @@ model Promotion {
   name        String
   description String?
   type        PromotionType
+  scope       PromotionScope
   value       Decimal
   usageLimit  Int?
   startDate   DateTime        @default(now())
