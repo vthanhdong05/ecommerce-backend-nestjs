@@ -9,6 +9,8 @@ import { PaginationUtilService } from '../../common/utils/pagination-util/pagina
 import { StringUtilService } from '../../common/utils/string-util/string-util.service';
 import { OrderAddressesService } from '../order-addresses/order-addresses.service';
 import { OrderItemsService } from '../order-items/order-items.service';
+import { OrderPromotionsService } from '../order-promotions/order-promotions.service';
+import { PromotionsService } from '../promotions/promotions.service';
 import { ALLOWED_VENDOR_STATUS_TRANSITIONS } from './const/order-status-transition.const';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { ExportOrdersDto, GetOrdersPaginationDto } from './dto/get-order.dto';
@@ -30,6 +32,8 @@ export class OrdersService extends PrismaBaseService<'order'> {
     private orderItemsService: OrderItemsService,
     private orderAddressesService: OrderAddressesService,
     private eventEmitter: EventEmitter2,
+    private promotionsService: PromotionsService,
+    private orderPromotionsService: OrderPromotionsService,
   ) {
     super(prismaService, 'order');
   }
@@ -91,10 +95,8 @@ export class OrdersService extends PrismaBaseService<'order'> {
     return paging.format(list);
   }
 
-  // (Tạo đơn — lõi của cả module: items + address + tính tiền, tất cả trong 1 transaction)
   async createOrder(createOrderDto: CreateOrderDto, user: UserInfo) {
-    const { items, shippingAddress, notes } = createOrderDto;
-    // TODO: promotionCode — chưa xử lý vì PromotionsModule chưa được implement, note backlog
+    const { items, shippingAddress, promotionCode, shippingPromotionCode, notes } = createOrderDto;
     const { order, orderItems } = await this.prismaService.$transaction(async (tx) => {
       // 1. Tạo Order rỗng trước (chưa biết tổng tiền), để có orderID gắn cho item/address
       const newOrder = await tx.order.create({
@@ -128,17 +130,56 @@ export class OrdersService extends PrismaBaseService<'order'> {
         { orderID: newOrder.id, type: 'shipping', ...resolvedAddress },
         tx,
       );
-      // 4. Tính lại tổng tiền từ các OrderItem vừa tạo
+      // 4. Tính subtotal từ các OrderItem vừa tạo
       const subtotal = orderItems.reduce((sum, item) => sum + Number(item.totalPrice), 0);
-      const totalAmount = subtotal; // chưa có taxAmount/shippingAmount/discountAmount thật — note backlog khi có Promotion/Shipping
+      let discountAmount = 0;
+      const shippingAmount = 0; // TODO: tính phí ship thật khi có Shipping module
+      // 5. Validate + áp dụng mã giảm giá đơn hàng (scope: ORDER)
+      if (promotionCode) {
+        const result = await this.promotionsService.validateAndCalculateDiscount(
+          promotionCode,
+          subtotal,
+          tx,
+        );
+        discountAmount += result.discountAmount;
+        await this.orderPromotionsService.createOrderPromotion(
+          {
+            orderID: newOrder.id,
+            promotionID: result.promotionID,
+            discountAmount: result.discountAmount,
+          },
+          tx,
+        );
+      }
+      // 6. Validate + áp dụng mã giảm phí ship (scope: SHIPPING)
+      if (shippingPromotionCode) {
+        const result = await this.promotionsService.validateAndCalculateDiscount(
+          shippingPromotionCode,
+          shippingAmount, // base là phí ship, không phải subtotal
+          tx,
+        );
+        discountAmount += result.discountAmount;
+        await this.orderPromotionsService.createOrderPromotion(
+          {
+            orderID: newOrder.id,
+            promotionID: result.promotionID,
+            discountAmount: result.discountAmount,
+          },
+          tx,
+        );
+      }
+      // 7. Tính totalAmount cuối cùng — Math.max(0) tránh số âm khi discount > subtotal
+      const totalAmount = Math.max(0, subtotal + shippingAmount - discountAmount);
 
       const updatedOrder = await tx.order.update({
         where: { id: newOrder.id },
-        data: { subtotal, totalAmount },
+        data: { subtotal, shippingAmount, discountAmount, totalAmount },
       });
+
       return { order: updatedOrder, orderItems };
     });
-    // 5. Sau khi transaction commit thành công — emit event cho các việc phụ (cập nhật totalOrders của từng vendor, gửi email...)
+
+    // 8. Sau khi transaction commit thành công — emit event cho các việc phụ
     const vendorIDs = [...new Set(orderItems.map((item) => item.vendorID))];
     this.eventEmitter.emit('order.created', { orderID: order.id, userID: user.userID, vendorIDs });
     return order;

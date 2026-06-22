@@ -68,7 +68,7 @@ export class PromotionsController {
     });
   }
 
-  @Patch('deactivate:/id')
+  @Patch('deactivate/:id')
   deactivatePromotion(@Param('id') id: Promotion['id']) {
     return this.promotionsService.deactivatePromotion({ id });
   }

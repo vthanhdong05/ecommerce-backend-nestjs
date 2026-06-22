@@ -22,7 +22,8 @@ const OrderAddressInputSchema = z.object({
 export const CreateOrderSchema = z.object({
   items: z.array(OrderItemInputSchema).min(1, { message: 'At least one item is required' }),
   shippingAddress: OrderAddressInputSchema.optional(),
-  promotionCode: z.string().trim().optional(),
+  promotionCode: z.string().trim().optional(), // mã giảm giá đơn hàng (scope: ORDER)
+  shippingPromotionCode: z.string().trim().optional(), // mã giảm phí ship (scope: SHIPPING)
   notes: z.string().trim().optional().nullable(),
 });
 

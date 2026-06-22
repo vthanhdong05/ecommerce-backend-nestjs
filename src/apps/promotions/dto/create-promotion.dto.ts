@@ -11,13 +11,12 @@ export const CreatePromotionSchema = z
     scope: z.nativeEnum(PromotionScope),
     value: z.coerce.number().positive({ message: 'Value must be greater than 0' }),
     usageLimit: z.coerce.number().int().positive().optional().nullable(),
-    startDate: z.coerce.date(),
-    endDate: z.coerce.date().optional().nullable(),
+    startDate: z.string().datetime({ message: 'Invalid startDate format' }), // đổi từ z.coerce.date()
+    endDate: z.string().datetime({ message: 'Invalid endDate format' }).optional().nullable(), // đổi từ z.coerce.date()
     status: z.nativeEnum(PromotionStatus).optional(),
   })
   .refine(
     (data) => {
-      // buy_x_get_y chỉ hợp lệ với scope ORDER — không có nghĩa khi áp vào phí ship
       if (data.type === PromotionType.buy_x_get_y && data.scope === PromotionScope.SHIPPING) {
         return false;
       }
@@ -27,7 +26,6 @@ export const CreatePromotionSchema = z
   )
   .refine(
     (data) => {
-      // percentage không được vượt quá 100
       if (data.type === PromotionType.percentage && data.value > 100) {
         return false;
       }
@@ -37,7 +35,7 @@ export const CreatePromotionSchema = z
   )
   .refine(
     (data) => {
-      // endDate phải sau startDate nếu có
+      // so sánh dạng string ISO vẫn đúng thứ tự thời gian
       if (data.endDate && data.startDate && data.endDate <= data.startDate) {
         return false;
       }

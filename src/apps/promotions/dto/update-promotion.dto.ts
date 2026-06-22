@@ -8,8 +8,8 @@ export const UpdatePromotionSchema = z
     name: z.string().trim().min(2).optional(),
     description: z.string().trim().optional().nullable(),
     usageLimit: z.coerce.number().int().positive().optional().nullable(),
-    startDate: z.coerce.date().optional(),
-    endDate: z.coerce.date().optional().nullable(),
+    startDate: z.string().datetime().optional(), // đổi từ z.coerce.date()
+    endDate: z.string().datetime().optional().nullable(), // đổi từ z.coerce.date()
     status: z.nativeEnum(PromotionStatus).optional(),
   })
   .refine(

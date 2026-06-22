@@ -35,12 +35,13 @@ import { ProductCategoriesModule } from './product-categories/product-categories
 import { ProductImagesModule } from './product-images/product-images.module';
 import { ProductVariantsModule } from './product-variants/product-variants.module';
 import { ProductsModule } from './products/products.module';
+import { PromotionsModule } from './promotions/promotions.module';
 import { RolePermissionsModule } from './role-permissions/role-permissions.module';
 import { RolesModule } from './roles/roles.module';
 import { UserSystemRolesModule } from './user-system-role/user-system-roles.module';
 import { UsersModule } from './users/users.module';
 import { VendorsModule } from './vendors/vendors.module';
-import { PromotionsModule } from './promotions/promotions.module';
+import { OrderPromotionsModule } from './order-promotions/order-promotions.module';
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { PromotionsModule } from './promotions/promotions.module';
     OrderItemsModule,
     OrdersModule,
     PromotionsModule,
+    OrderPromotionsModule,
   ],
   controllers: [AppController],
   providers: [

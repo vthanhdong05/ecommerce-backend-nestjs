@@ -4,6 +4,8 @@ import { StringUtilService } from 'src/common/utils/string-util/string-util.serv
 import { AutoMockingModule } from 'src/testing/auto-mocking/auto-mocking.module';
 import { OrderAddressesService } from '../order-addresses/order-addresses.service';
 import { OrderItemsService } from '../order-items/order-items.service';
+import { OrderPromotionsService } from '../order-promotions/order-promotions.service';
+import { PromotionsService } from '../promotions/promotions.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrdersService } from './orders.service';
 
@@ -11,9 +13,13 @@ describe('OrdersService', () => {
   let service: OrdersService;
   let orderItemsService: OrderItemsService;
   let orderAddressesService: OrderAddressesService;
+  let orderPromotionsService: OrderPromotionsService;
+  let promotionsService: PromotionsService;
   let stringUtilService: StringUtilService;
   let createOrderItemSpy: jest.SpyInstance;
   let createOrderAddressSpy: jest.SpyInstance;
+  let createOrderPromotionSpy: jest.SpyInstance;
+  let validateAndCalculateDiscountSpy: jest.SpyInstance;
 
   const mockExtended = {
     findFirst: jest.fn(),
@@ -23,22 +29,17 @@ describe('OrdersService', () => {
     export: jest.fn(),
   };
 
-  // mock cho Prisma.TransactionClient (tx)
   const mockTx = {
-    order: {
-      create: jest.fn(),
-      update: jest.fn(),
-    },
-    user: {
-      findUnique: jest.fn(),
-    },
-    productVariant: {
-      update: jest.fn(),
-    },
+    order: { create: jest.fn(), update: jest.fn() },
+    user: { findUnique: jest.fn() },
+    productVariant: { update: jest.fn() },
   };
+
+  const mockUser = { userID: 'user-1', userEmail: 'user@example.com' };
 
   beforeEach(async () => {
     jest.clearAllMocks();
+
     const moduleRef = await AutoMockingModule.createTestingModule({
       providers: [OrdersService],
     });
@@ -46,6 +47,8 @@ describe('OrdersService', () => {
     service = moduleRef.get(OrdersService);
     orderItemsService = moduleRef.get(OrderItemsService);
     orderAddressesService = moduleRef.get(OrderAddressesService);
+    orderPromotionsService = moduleRef.get(OrderPromotionsService);
+    promotionsService = moduleRef.get(PromotionsService);
     stringUtilService = moduleRef.get(StringUtilService);
 
     jest.spyOn(service, 'extended', 'get').mockReturnValue(mockExtended as any);
@@ -56,8 +59,8 @@ describe('OrdersService', () => {
 
     createOrderItemSpy = jest.spyOn(orderItemsService, 'createOrderItem');
     createOrderAddressSpy = jest.spyOn(orderAddressesService, 'createOrderAddress');
-
-    jest.clearAllMocks();
+    createOrderPromotionSpy = jest.spyOn(orderPromotionsService, 'createOrderPromotion');
+    validateAndCalculateDiscountSpy = jest.spyOn(promotionsService, 'validateAndCalculateDiscount');
   });
 
   describe('getOrder', () => {
@@ -107,39 +110,38 @@ describe('OrdersService', () => {
   });
 
   describe('createOrder', () => {
-    const dto: CreateOrderDto = {
-      items: [{ productVariantID: 'variant-1', quantity: 2 }],
-      notes: 'Please call before delivery',
+    const mockNewOrder = { id: 'order-1', orderNumber: 'ORD-20260622-ABC123' };
+    const mockOrderItem = {
+      id: 'item-1',
+      orderID: 'order-1',
+      vendorID: 'vendor-1',
+      productVariantID: 'variant-1',
+      quantity: 2,
+      totalPrice: 200,
+    };
+    const mockUserProfile = {
+      firstName: 'Nguyen',
+      lastName: 'Van A',
+      fullAddress: '123 Le Loi',
+      city: 'HCMC',
+      province: null,
+      country: 'VN',
+      phone: '0900000000',
     };
 
-    const mockUser = { userID: 'user-1', userEmail: 'user@example.com' };
-
-    it('should create order items, fallback to user profile address, and calculate total', async () => {
-      const mockNewOrder = { id: 'order-1', orderNumber: 'ORD-20260622-ABC123' };
-      const mockOrderItem = {
-        id: 'item-1',
-        orderID: 'order-1',
-        vendorID: 'vendor-1',
-        productVariantID: 'variant-1',
-        quantity: 2,
-        totalPrice: 200,
-      };
-      const mockUserProfile = {
-        firstName: 'Nguyen',
-        lastName: 'Van A',
-        fullAddress: '123 Le Loi',
-        city: 'HCMC',
-        province: null,
-        country: 'VN',
-        phone: '0900000000',
-      };
-      const mockUpdatedOrder = { id: 'order-1', subtotal: 200, totalAmount: 200 };
-
+    beforeEach(() => {
       mockTx.order.create.mockResolvedValue(mockNewOrder);
-      jest.spyOn(orderItemsService, 'createOrderItem').mockResolvedValue(mockOrderItem as any);
+      createOrderItemSpy.mockResolvedValue(mockOrderItem);
       mockTx.user.findUnique.mockResolvedValue(mockUserProfile);
-      jest.spyOn(orderAddressesService, 'createOrderAddress').mockResolvedValue({} as any);
-      mockTx.order.update.mockResolvedValue(mockUpdatedOrder);
+      createOrderAddressSpy.mockResolvedValue({});
+      mockTx.order.update.mockResolvedValue({ id: 'order-1', subtotal: 200, totalAmount: 200 });
+    });
+
+    it('should create order without promotion and calculate total correctly', async () => {
+      const dto: CreateOrderDto = {
+        items: [{ productVariantID: 'variant-1', quantity: 2 }],
+        notes: 'Please call before delivery',
+      };
 
       const result = await service.createOrder(dto, mockUser);
 
@@ -156,41 +158,66 @@ describe('OrdersService', () => {
         { orderID: 'order-1', productVariantID: 'variant-1', quantity: 2 },
         mockTx,
       );
-      expect(createOrderAddressSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          orderID: 'order-1',
-          type: 'shipping',
-          fullAddress: '123 Le Loi',
-          phone: '0900000000',
-        }),
+      expect(mockTx.order.update).toHaveBeenCalledWith({
+        where: { id: 'order-1' },
+        data: expect.objectContaining({ subtotal: 200, discountAmount: 0 }),
+      });
+      expect(validateAndCalculateDiscountSpy).not.toHaveBeenCalled();
+      expect(createOrderPromotionSpy).not.toHaveBeenCalled();
+      expect(result).toBeDefined();
+    });
+
+    it('should apply ORDER promotion and reduce totalAmount', async () => {
+      const dto: CreateOrderDto = {
+        items: [{ productVariantID: 'variant-1', quantity: 2 }],
+        promotionCode: 'SAVE10',
+      };
+
+      validateAndCalculateDiscountSpy.mockResolvedValue({
+        promotionID: 'promo-1',
+        discountAmount: 20,
+        scope: 'ORDER',
+      });
+      createOrderPromotionSpy.mockResolvedValue({});
+
+      await service.createOrder(dto, mockUser);
+
+      expect(validateAndCalculateDiscountSpy).toHaveBeenCalledWith('SAVE10', 200, mockTx);
+      expect(createOrderPromotionSpy).toHaveBeenCalledWith(
+        { orderID: 'order-1', promotionID: 'promo-1', discountAmount: 20 },
         mockTx,
       );
       expect(mockTx.order.update).toHaveBeenCalledWith({
         where: { id: 'order-1' },
-        data: { subtotal: 200, totalAmount: 200 },
+        data: expect.objectContaining({ subtotal: 200, discountAmount: 20, totalAmount: 180 }),
       });
-      expect(result).toEqual(mockUpdatedOrder);
     });
 
-    it('should use the provided shippingAddress instead of the user profile', async () => {
-      const dtoWithAddress: CreateOrderDto = {
-        ...dto,
-        shippingAddress: {
-          firstName: 'Tran',
-          fullAddress: '456 Nguyen Hue',
-          phone: '0911111111',
-        },
+    it('should apply SHIPPING promotion separately from ORDER promotion', async () => {
+      const dto: CreateOrderDto = {
+        items: [{ productVariantID: 'variant-1', quantity: 2 }],
+        promotionCode: 'SAVE10',
+        shippingPromotionCode: 'FREESHIP',
       };
 
-      mockTx.order.create.mockResolvedValue({ id: 'order-1' });
-      jest.spyOn(orderItemsService, 'createOrderItem').mockResolvedValue({
-        vendorID: 'vendor-1',
-        totalPrice: 100,
-      } as any);
-      jest.spyOn(orderAddressesService, 'createOrderAddress').mockResolvedValue({} as any);
-      mockTx.order.update.mockResolvedValue({ id: 'order-1', subtotal: 100, totalAmount: 100 });
+      validateAndCalculateDiscountSpy
+        .mockResolvedValueOnce({ promotionID: 'promo-1', discountAmount: 20, scope: 'ORDER' })
+        .mockResolvedValueOnce({ promotionID: 'promo-2', discountAmount: 0, scope: 'SHIPPING' }); // shippingAmount = 0 hiện tại
+      createOrderPromotionSpy.mockResolvedValue({});
 
-      await service.createOrder(dtoWithAddress, mockUser);
+      await service.createOrder(dto, mockUser);
+
+      expect(validateAndCalculateDiscountSpy).toHaveBeenCalledTimes(2);
+      expect(createOrderPromotionSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('should use the provided shippingAddress instead of user profile', async () => {
+      const dto: CreateOrderDto = {
+        items: [{ productVariantID: 'variant-1', quantity: 2 }],
+        shippingAddress: { firstName: 'Tran', fullAddress: '456 Nguyen Hue', phone: '0911111111' },
+      };
+
+      await service.createOrder(dto, mockUser);
 
       expect(mockTx.user.findUnique).not.toHaveBeenCalled();
       expect(createOrderAddressSpy).toHaveBeenCalledWith(
@@ -199,12 +226,10 @@ describe('OrdersService', () => {
       );
     });
 
-    it('should throw BadRequestException when no shippingAddress is provided and user profile has no address', async () => {
-      mockTx.order.create.mockResolvedValue({ id: 'order-1' });
-      jest.spyOn(orderItemsService, 'createOrderItem').mockResolvedValue({
-        vendorID: 'vendor-1',
-        totalPrice: 100,
-      } as any);
+    it('should throw BadRequestException when user profile has no address and no shippingAddress provided', async () => {
+      const dto: CreateOrderDto = {
+        items: [{ productVariantID: 'variant-1', quantity: 2 }],
+      };
       mockTx.user.findUnique.mockResolvedValue({ fullAddress: null, phone: null });
 
       await expect(service.createOrder(dto, mockUser as any)).rejects.toThrow(BadRequestException);

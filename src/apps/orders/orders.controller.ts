@@ -59,7 +59,7 @@ export class OrdersController {
     return this.ordersService.updateOrder({ id, userID: user.userID, data: updateOrderDto });
   }
 
-  @Patch(':id/cancel')
+  @Patch('cancel/:id')
   cancelOrder(@Param('id') id: Order['id'], @User() user: UserInfo) {
     return this.ordersService.cancelOrder({ id, userID: user.userID });
   }
