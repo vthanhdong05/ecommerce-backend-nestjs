@@ -20,6 +20,7 @@ describe('OrdersService', () => {
   let createOrderAddressSpy: jest.SpyInstance;
   let createOrderPromotionSpy: jest.SpyInstance;
   let validateAndCalculateDiscountSpy: jest.SpyInstance;
+  let eventEmitterSpy: jest.SpyInstance;
 
   const mockExtended = {
     findFirst: jest.fn(),
@@ -61,6 +62,7 @@ describe('OrdersService', () => {
     createOrderAddressSpy = jest.spyOn(orderAddressesService, 'createOrderAddress');
     createOrderPromotionSpy = jest.spyOn(orderPromotionsService, 'createOrderPromotion');
     validateAndCalculateDiscountSpy = jest.spyOn(promotionsService, 'validateAndCalculateDiscount');
+    eventEmitterSpy = jest.spyOn(service['eventEmitter'], 'emit');
   });
 
   describe('getOrder', () => {
@@ -165,6 +167,12 @@ describe('OrdersService', () => {
       expect(validateAndCalculateDiscountSpy).not.toHaveBeenCalled();
       expect(createOrderPromotionSpy).not.toHaveBeenCalled();
       expect(result).toBeDefined();
+      expect(eventEmitterSpy).toHaveBeenCalledWith('order.created', {
+        orderID: 'order-1',
+        userID: 'user-1',
+        vendorIDs: ['vendor-1'],
+        productVariantIDs: ['variant-1'],
+      });
     });
 
     it('should apply ORDER promotion and reduce totalAmount', async () => {

@@ -181,7 +181,13 @@ export class OrdersService extends PrismaBaseService<'order'> {
 
     // 8. Sau khi transaction commit thành công — emit event cho các việc phụ
     const vendorIDs = [...new Set(orderItems.map((item) => item.vendorID))];
-    this.eventEmitter.emit('order.created', { orderID: order.id, userID: user.userID, vendorIDs });
+    const productVariantIDs = orderItems.map((item) => item.productVariantID);
+    this.eventEmitter.emit('order.created', {
+      orderID: order.id,
+      userID: user.userID,
+      vendorIDs,
+      productVariantIDs,
+    });
     return order;
   }
   private generateOrderNumber(): string {

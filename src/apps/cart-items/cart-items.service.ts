@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { PrismaBaseService } from '../../common/services/prisma-base.service';
@@ -71,5 +72,26 @@ export class CartItemsService extends PrismaBaseService<'cartItem'> {
       throw new NotFoundException('CartItem not found');
     }
     return this.client.delete({ where });
+  }
+
+  @OnEvent('order.created')
+  async onOrderCreated({
+    userID,
+    productVariantIDs,
+  }: {
+    orderID: string;
+    userID: string;
+    vendorIDs: string[];
+    productVariantIDs: string[];
+  }) {
+    // Lấy cart của user
+    const cart = await this.cartsService.getOrCreateCart(userID);
+    // Xóa đúng các CartItem đã đặt, giữ lại những item chưa đặt
+    await this.prismaService.cartItem.deleteMany({
+      where: {
+        cartID: cart.id,
+        productVariantID: { in: productVariantIDs },
+      },
+    });
   }
 }

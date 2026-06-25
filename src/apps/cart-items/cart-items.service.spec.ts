@@ -170,4 +170,29 @@ describe('CartItemsService', () => {
       expect(mockClient.delete).not.toHaveBeenCalled();
     });
   });
+
+  describe('onOrderCreated', () => {
+    it('should delete cart items that were ordered', async () => {
+      const mockCart = { id: 'cart-1', userID: 'user-1' };
+      getOrCreateCartSpy.mockResolvedValue(mockCart);
+
+      const mockDeleteMany = jest.fn().mockResolvedValue({ count: 2 });
+      service['prismaService'].cartItem = { deleteMany: mockDeleteMany } as any;
+
+      await service.onOrderCreated({
+        orderID: 'order-1',
+        userID: 'user-1',
+        vendorIDs: ['vendor-1'],
+        productVariantIDs: ['variant-1', 'variant-2'],
+      });
+
+      expect(getOrCreateCartSpy).toHaveBeenCalledWith('user-1');
+      expect(mockDeleteMany).toHaveBeenCalledWith({
+        where: {
+          cartID: 'cart-1',
+          productVariantID: { in: ['variant-1', 'variant-2'] },
+        },
+      });
+    });
+  });
 });
