@@ -29,6 +29,7 @@ import { AuthModule } from './auth/auth.module';
 import { CategoriesModule } from './categories/categories.module';
 import { OrderAddressesModule } from './order-addresses/order-addresses.module';
 import { OrderItemsModule } from './order-items/order-items.module';
+import { OrderPromotionsModule } from './order-promotions/order-promotions.module';
 import { OrdersModule } from './orders/orders.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { ProductCategoriesModule } from './product-categories/product-categories.module';
@@ -41,7 +42,7 @@ import { RolesModule } from './roles/roles.module';
 import { UserSystemRolesModule } from './user-system-role/user-system-roles.module';
 import { UsersModule } from './users/users.module';
 import { VendorsModule } from './vendors/vendors.module';
-import { OrderPromotionsModule } from './order-promotions/order-promotions.module';
+import { CartsModule } from './carts/carts.module';
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { OrderPromotionsModule } from './order-promotions/order-promotions.modul
     OrdersModule,
     PromotionsModule,
     OrderPromotionsModule,
+    CartsModule,
   ],
   controllers: [AppController],
   providers: [
