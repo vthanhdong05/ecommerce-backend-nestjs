@@ -26,6 +26,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthGuard } from './auth/auth.guard';
 import { AuthModule } from './auth/auth.module';
+import { CartsModule } from './carts/carts.module';
 import { CategoriesModule } from './categories/categories.module';
 import { OrderAddressesModule } from './order-addresses/order-addresses.module';
 import { OrderItemsModule } from './order-items/order-items.module';
@@ -42,7 +43,7 @@ import { RolesModule } from './roles/roles.module';
 import { UserSystemRolesModule } from './user-system-role/user-system-roles.module';
 import { UsersModule } from './users/users.module';
 import { VendorsModule } from './vendors/vendors.module';
-import { CartsModule } from './carts/carts.module';
+import { CartItemsModule } from './cart-items/cart-items.module';
 
 @Module({
   imports: [
@@ -83,6 +84,7 @@ import { CartsModule } from './carts/carts.module';
     PromotionsModule,
     OrderPromotionsModule,
     CartsModule,
+    CartItemsModule,
   ],
   controllers: [AppController],
   providers: [
