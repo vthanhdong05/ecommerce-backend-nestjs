@@ -16,6 +16,7 @@ import type { UserInfo } from '../../common/decorators/user.decorator';
 import { User } from '../../common/decorators/user.decorator';
 import { ExcelResponseInterceptor } from '../../common/interceptors/excel-response/excel-response.interceptor';
 import { ParseParamsPaginationPipe } from '../../common/pipes/parse-params-pagination.pipe';
+import { SkipPermission } from '../auth/auth.decorator';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { ExportOrdersDto, GetOrdersPaginationDto } from './dto/get-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
@@ -26,11 +27,13 @@ export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
   @Post()
+  @SkipPermission()
   createOrder(@Body() createDto: CreateOrderDto, @User() user: UserInfo) {
     return this.ordersService.createOrder(createDto, user);
   }
 
   @Get()
+  @SkipPermission()
   @UsePipes(ParseParamsPaginationPipe)
   getOrders(@Query() query: GetOrdersPaginationDto, @User() user: UserInfo) {
     return this.ordersService.getOrders({ ...query, userID: user.userID });
@@ -46,11 +49,13 @@ export class OrdersController {
   }
 
   @Get(':id')
+  @SkipPermission()
   getOrder(@Param('id') id: Order['id'], @User() user: UserInfo) {
     return this.ordersService.getOrder({ id, userID: user.userID });
   }
 
   @Patch(':id')
+  @SkipPermission()
   updateOrder(
     @Param('id') id: Order['id'],
     @Body() updateOrderDto: UpdateOrderDto,
@@ -60,6 +65,7 @@ export class OrdersController {
   }
 
   @Patch('cancel/:id')
+  @SkipPermission()
   cancelOrder(@Param('id') id: Order['id'], @User() user: UserInfo) {
     return this.ordersService.cancelOrder({ id, userID: user.userID });
   }

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Query, UsePipes } from '@nestjs/common';
 import { Order } from '@prisma/client';
 import { ParseParamsPaginationPipe } from 'src/common/pipes/parse-params-pagination.pipe';
+import { SkipPermission } from '../auth/auth.decorator';
 import { Vendor } from '../vendors/entities/vendor.entity';
 import { VendorOrderParam } from './const/vendor-order.const';
 import { GetOrdersPaginationDto } from './dto/get-order.dto';
@@ -12,6 +13,7 @@ export class VendorOrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
   @Get()
+  @SkipPermission()
   @UsePipes(ParseParamsPaginationPipe)
   getVendorOrders(
     @Param(VendorOrderParam.VENDOR_ID_PARAM) vendorId: Vendor['id'],
@@ -21,6 +23,7 @@ export class VendorOrdersController {
   }
 
   @Get(':id')
+  @SkipPermission()
   getVendorOrder(
     @Param(VendorOrderParam.VENDOR_ID_PARAM) vendorId: Vendor['id'],
     @Param('id') id: Order['id'],
@@ -29,6 +32,7 @@ export class VendorOrdersController {
   }
 
   @Patch(':id/status')
+  @SkipPermission()
   updateVendorOrderStatus(
     @Param(VendorOrderParam.VENDOR_ID_PARAM) vendorId: Vendor['id'],
     @Param('id') id: Order['id'],
