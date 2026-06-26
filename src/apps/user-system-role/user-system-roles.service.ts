@@ -81,53 +81,33 @@ export class UserSystemRolesService extends PrismaBaseService<'userSystemRole'> 
     const sheetName = this.excelSheets[this.userSystemRoleEntityName];
     const dataCreated = await this.excelUtilService.read(file);
     const dataImport = dataCreated[sheetName];
-
-    const usersData = new Map<string, string>();
-    const allUsers = await this.usersService.client.findMany({
-      select: { id: true, email: true },
-    });
-    for (const user of allUsers) {
-      usersData.set(user.email, user.id);
-    }
-
-    const rolesData = new Map<string, string>();
-    const allRoles = await this.rolesService.client.findMany({
-      where: {
-        roleType: { in: [RoleType.SUPER_ADMIN, RoleType.SYSTEM] },
-      },
-      select: { id: true, name: true },
-    });
-    for (const role of allRoles) {
-      rolesData.set(role.name, role.id);
-    }
-
+    const [allUsers, allRoles] = await Promise.all([
+      this.usersService.client.findMany({ select: { id: true, email: true } }),
+      this.rolesService.client.findMany({
+        where: { roleType: { in: [RoleType.SUPER_ADMIN, RoleType.SYSTEM] } },
+        select: { id: true, name: true },
+      }),
+    ]);
+    const usersData = new Map(allUsers.map((u) => [u.email, u.id]));
+    const rolesData = new Map(allRoles.map((r) => [r.name, r.id]));
     const idsMapping = dataImport.map((item) => {
       const { userEmail, roleName } = item ?? {};
       const userID = usersData.get(userEmail);
-      if (!userID) {
-        throw new BadRequestException(`User not found with email: "${userEmail}"`);
-      }
+      if (!userID) throw new BadRequestException(`User not found with email: "${userEmail}"`);
       const roleID = rolesData.get(roleName);
-      if (!roleID) {
-        throw new BadRequestException(`System role not found: "${roleName}"`);
-      }
+      if (!roleID) throw new BadRequestException(`System role not found: "${roleName}"`);
       return { userID, roleID };
     });
-
-    await this.extended.deleteMany({
-      where: {
-        OR: idsMapping,
-      },
+    // deleteMany + createMany trong cùng 1 transaction — rollback nếu createMany lỗi
+    return this.prismaService.$transaction(async (tx) => {
+      await tx.userSystemRole.deleteMany({ where: { OR: idsMapping } });
+      return tx.userSystemRole.createMany({
+        data: idsMapping.map((item) => ({
+          ...item,
+          createdBy: user.userEmail, // fix từ user (object) → user.userEmail (string)
+        })),
+      });
     });
-
-    const data = await this.extended.createMany({
-      data: idsMapping.map((item) => ({
-        ...item,
-        createdBy: user,
-      })),
-    });
-
-    return data;
   }
 
   // Lấy danh sách mapping từ database
