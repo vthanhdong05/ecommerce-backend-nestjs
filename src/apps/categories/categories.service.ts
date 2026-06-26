@@ -156,7 +156,14 @@ export class CategoriesService extends PrismaBaseService<'category'> implements 
   }
 
   async deleteCategory(where: Prisma.CategoryWhereUniqueInput) {
-    const data = await this.extended.softDelete(where);
-    return data;
+    const hasChildren = await this.extended.findFirst({
+      where: { parentID: where.id as string },
+    });
+    if (hasChildren) {
+      throw new BadRequestException(
+        'Cannot delete a category that has subcategories. Delete or move subcategories first.',
+      );
+    }
+    return this.extended.softDelete(where);
   }
 }
