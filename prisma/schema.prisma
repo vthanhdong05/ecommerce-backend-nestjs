@@ -97,6 +97,7 @@ model User {
   createdBy   String?
   updatedAt   DateTime   @updatedAt
   deletedAt   DateTime?
+  resetToken  String?
 
   vendors         Vendor[]
   userSystemRoles UserSystemRole[] // (user có role hệ thống)

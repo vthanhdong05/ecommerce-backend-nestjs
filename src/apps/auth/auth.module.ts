@@ -7,6 +7,7 @@ import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JWTEnvs } from './consts/jwt.const';
+import { MailUtilService } from 'src/common/utils/mail-util/mail-util.service';
 
 @Module({
   imports: [
@@ -20,7 +21,7 @@ import { JWTEnvs } from './consts/jwt.const';
     UsersModule,
     StringUtilModule,
   ],
-  providers: [AuthService, StringUtilService],
+  providers: [AuthService, StringUtilService, MailUtilService],
   controllers: [AuthController],
   exports: [AuthService],
 })

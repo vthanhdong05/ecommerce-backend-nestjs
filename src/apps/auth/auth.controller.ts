@@ -6,6 +6,7 @@ import { COOKIE_CONFIG_DEFAULT, CookiesToken } from '../../common/decorators/coo
 import { SkipAuth } from './auth.decorator';
 import { AuthService } from './auth.service';
 import { TokenKeys } from './consts/jwt.const';
+import { ForgotPasswordDto, ResetPasswordDto } from './dto/password.dto';
 import { SignInDto, SignUpDto } from './dto/sign.dto';
 
 @Controller('auth')
@@ -63,5 +64,17 @@ export class AuthController {
       maxAge: ms(CookiesToken.REFRESH_TOKEN_EXPIRE_IN),
     });
     return data;
+  }
+
+  @Post('forgot-password')
+  @SkipAuth()
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    return await this.authService.forgotPassword(forgotPasswordDto);
+  }
+
+  @Post('reset-password')
+  @SkipAuth()
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return await this.authService.resetPassword(resetPasswordDto);
   }
 }

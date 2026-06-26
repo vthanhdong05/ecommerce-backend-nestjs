@@ -16,4 +16,5 @@ export class User implements UserPrisma {
   createdBy!: string;
   updatedAt!: Date;
   deletedAt!: Date | null;
+  resetToken!: string | null;
 }

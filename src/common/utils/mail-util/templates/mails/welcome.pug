@@ -1,0 +1,165 @@
+doctype html
+html(lang="en")
+  head
+    meta(charset="UTF-8")
+    meta(name="viewport" content="width=device-width, initial-scale=1.0")
+    title Welcome to VTDhub
+
+    style.
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: #ffffff;
+        font-family: Google Sans, Roboto, Arial, sans-serif;
+        font-size: 14px;
+        color: #3c4043;
+        line-height: 1.6;
+      }
+
+      .wrapper {
+        max-width: 600px;
+        margin: 48px auto;
+        padding: 0 24px;
+      }
+
+      .brand {
+        font-size: 14px;
+        font-weight: 600;
+        color: #6750a4;
+        margin-bottom: 16px;
+      }
+
+      h1 {
+        font-size: 24px;
+        font-weight: 700;
+        color: #1f1f1f;
+        margin-bottom: 20px;
+      }
+
+      p {
+        margin-bottom: 14px;
+        color: #3c4043;
+      }
+
+      .divider {
+        border: none;
+        border-top: 1px solid #e8eaed;
+        margin: 20px 0;
+      }
+
+      .info-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 4px 0;
+      }
+
+      .info-table tr td {
+        padding: 10px 0;
+        border-bottom: 1px solid #e8eaed;
+        font-size: 14px;
+        color: #3c4043;
+      }
+
+      .info-table tr:last-child td {
+        border-bottom: none;
+      }
+
+      .info-table td:first-child {
+        color: #80868b;
+        width: 140px;
+      }
+
+      .info-table td:last-child {
+        font-weight: 600;
+        color: #1f1f1f;
+      }
+
+      .btn {
+        display: inline-block;
+        margin-top: 24px;
+        padding: 10px 22px;
+        background: #6750a4;
+        color: #ffffff !important;
+        text-decoration: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .tip-box {
+        margin-top: 28px;
+        background: #f8f5ff;
+        border-left: 3px solid #6750a4;
+        padding: 14px 16px;
+        border-radius: 4px;
+        font-size: 13px;
+        color: #3c4043;
+      }
+
+      .tip-box strong {
+        color: #6750a4;
+      }
+
+      .footer {
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid #e8eaed;
+        font-size: 12px;
+        color: #80868b;
+        line-height: 1.8;
+      }
+
+      .footer a {
+        color: #6750a4;
+        text-decoration: none;
+      }
+
+  body
+    .wrapper
+      .brand VTDhub
+
+      h1 Welcome to VTDhub
+
+      p Hello #{username},
+
+      p Thank you for creating an account on VTDhub. Here is a copy of your account details.
+
+      hr.divider
+
+      table.info-table
+        tr
+          td Username
+          td #{username}
+        tr
+          td Email
+          td #{email}
+        tr
+          td Member since
+          td #{createdAt}
+
+      hr.divider
+
+      a.btn(href=loginUrl) Go to your account
+
+      .tip-box
+        strong 💡 Tip: &nbsp;
+        | Keep your login credentials safe and never share your password with anyone.
+
+      p(style="margin-top: 28px;")
+        | If you did not create this account, please contact us immediately at &nbsp;
+        a(href="mailto:support@kamiki.com" style="color:#6750a4;") support@kamiki.com
+
+      p Thanks for reading.
+
+      .footer
+        | © 2026 VTDhub. All rights reserved.
+        br
+        a(href="#") Unsubscribe
+        |  · 
+        a(href="#") Privacy Policy
+        |  · 
+        a(href="#") Terms of Service

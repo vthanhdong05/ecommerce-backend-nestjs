@@ -24,6 +24,7 @@
     "prisma:generate:zod": "npx prisma generate --generator zod"
   },
   "dependencies": {
+    "@nestjs-modules/mailer": "^1.10.3",
     "@nestjs/cache-manager": "^3.1.2",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
@@ -45,9 +46,11 @@
     "helmet": "^8.2.0",
     "nest-winston": "^1.10.2",
     "nestjs-zod": "^5.0.1",
+    "nodemailer": "^9.0.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "prisma-json-types-generator": "^3.6.2",
+    "pug": "^3.0.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.3",
@@ -72,6 +75,7 @@
     "@types/multer": "^2.1.0",
     "@types/node": "^24.13.1",
     "@types/passport-jwt": "^4.0.1",
+    "@types/pug": "^2.0.10",
     "@types/supertest": "^7.0.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.1.8",

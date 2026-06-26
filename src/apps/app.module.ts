@@ -26,6 +26,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthGuard } from './auth/auth.guard';
 import { AuthModule } from './auth/auth.module';
+import { CartItemsModule } from './cart-items/cart-items.module';
 import { CartsModule } from './carts/carts.module';
 import { CategoriesModule } from './categories/categories.module';
 import { OrderAddressesModule } from './order-addresses/order-addresses.module';
@@ -43,7 +44,7 @@ import { RolesModule } from './roles/roles.module';
 import { UserSystemRolesModule } from './user-system-role/user-system-roles.module';
 import { UsersModule } from './users/users.module';
 import { VendorsModule } from './vendors/vendors.module';
-import { CartItemsModule } from './cart-items/cart-items.module';
+import { MailUtilModule } from 'src/common/utils/mail-util/mail-util.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { CartItemsModule } from './cart-items/cart-items.module';
     EventsModule,
     EventEmitterModule.forRoot(),
     AutoMockingModule,
+    MailUtilModule,
     UsersModule,
     AuthModule,
     RolesModule,
