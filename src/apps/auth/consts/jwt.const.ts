@@ -1,5 +1,6 @@
 export enum JWTEnvs {
   JWT_SECRET = 'JWT_SECRET',
+  RESET_TOKEN_SECRET = 'RESET_TOKEN_SECRET',
 }
 
 export enum JWTToken {

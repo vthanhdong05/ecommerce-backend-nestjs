@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService, TokenExpiredError } from '@nestjs/jwt';
 import { UserInfo } from 'src/common/decorators/user.decorator';
 import { PrismaService } from 'src/common/prisma/prisma.service';
@@ -11,7 +12,7 @@ import { MailTemplate } from 'src/common/utils/mail-util/mail-util.const';
 import { MailUtilService } from 'src/common/utils/mail-util/mail-util.service';
 import { StringUtilService } from 'src/common/utils/string-util/string-util.service';
 import { UsersService } from '../users/users.service';
-import { JWTToken, TokenKeys } from './consts/jwt.const';
+import { JWTEnvs, JWTToken, TokenKeys } from './consts/jwt.const';
 import { ForgotPasswordDto, ResetPasswordDto } from './dto/password.dto';
 import { SignInDto, SignUpDto } from './dto/sign.dto';
 
@@ -23,6 +24,7 @@ export class AuthService {
     private readonly userService: UsersService,
     private readonly stringUtilService: StringUtilService,
     private mailUtilService: MailUtilService,
+    private readonly configService: ConfigService,
   ) {}
 
   async createToken<T extends Record<string, any>>(payload: T) {
@@ -92,7 +94,10 @@ export class AuthService {
     if (!user) return { message: 'If this account exists, a reset email has been sent.' };
     const resetToken = await this.jwtService.signAsync(
       { userId: user.id },
-      { expiresIn: JWTToken.RESET_TOKEN_EXPIRE_IN },
+      {
+        expiresIn: JWTToken.RESET_TOKEN_EXPIRE_IN,
+        secret: this.configService.get(JWTEnvs.RESET_TOKEN_SECRET),
+      },
     );
     await this.userService.extended.update({
       where: { id: user.id },
@@ -123,7 +128,14 @@ export class AuthService {
 
   async resetPassword(resetPasswordDto: ResetPasswordDto) {
     const { token, password } = resetPasswordDto;
-    const decoded = await this.verifyToken(token);
+    let decoded: any;
+    try {
+      decoded = await this.jwtService.verifyAsync(token, {
+        secret: this.configService.get(JWTEnvs.RESET_TOKEN_SECRET),
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
     if (!decoded) throw new UnauthorizedException('Invalid token');
     // Kiểm tra token khớp trong DB (one-time use)
     const user = await this.userService.extended.findFirst({
@@ -139,7 +151,6 @@ export class AuthService {
         resetToken: null,
       },
     });
-
     return { message: 'Password reset successfully.' };
   }
 }

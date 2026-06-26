@@ -1,12 +1,17 @@
-import { PartialType, PickType } from '@nestjs/swagger';
-import { Auth } from '../entities/auth.entity';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
-// (DTO này dùng để nhận dữ liệu khi người dùng yêu cầu quên mật khẩu, cho phép họ nhập email hoặc số điện thoại, kèm theo đường dẫn chuyển hướng.)
-export class ForgotPasswordDto extends PartialType(PickType(Auth, ['email', 'phone'])) {
-  redirectTo!: string;
-}
+export const ForgotPasswordSchema = z.object({
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
+  redirectTo: z.string().url(),
+});
 
-// (DTO này dùng để nhận dữ liệu khi người dùng đặt lại mật khẩu, bao gồm mật khẩu mới và ID của người dùng cần reset.)
-export class ResetPasswordDto extends PickType(Auth, ['password']) {
-  token!: string;
-}
+export const ResetPasswordSchema = z.object({
+  token: z.string(),
+  password: z.string().min(8),
+});
+
+// DTO extends từ Zod schema
+export class ForgotPasswordDto extends createZodDto(ForgotPasswordSchema) {}
+export class ResetPasswordDto extends createZodDto(ResetPasswordSchema) {}
