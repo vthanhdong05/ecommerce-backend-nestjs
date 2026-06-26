@@ -252,7 +252,6 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
       include: { vendor: true },
     });
     if (!member) throw new NotFoundException('Member not found');
-
     // Ngăn owner tự xóa chính mình — owner là Vendor.userID
     if (member.vendor.userID === requestingUserID && member.userID === requestingUserID) {
       throw new BadRequestException('Owner cannot remove themselves from the vendor');
