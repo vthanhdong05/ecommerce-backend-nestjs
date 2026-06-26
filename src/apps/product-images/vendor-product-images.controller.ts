@@ -6,14 +6,13 @@ import {
   Param,
   Patch,
   Post,
-  UploadedFiles,
+  UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ProductImage, Vendor } from '@prisma/client';
 import type { UserInfo } from '../../common/decorators/user.decorator';
 import { User } from '../../common/decorators/user.decorator';
-import type { File } from '../../common/utils/excel-util/dto/excel-util.interface';
 import { Product } from '../products/entities/product.entity';
 import { VendorProductImageParams } from './const/vendor-product-image.const';
 import { UpdateProductImageDto } from './dto/update-product-images.dto';
@@ -26,15 +25,15 @@ export class VendorProductImageController {
   constructor(private readonly productImagesService: ProductImagesService) {}
 
   @Post('upload')
-  @UseInterceptors(FilesInterceptor('files'))
-  uploadProductImages(
+  @UseInterceptors(FileInterceptor('file'))
+  uploadProductImage(
     @Param(VendorProductImageParams.VENDOR_ID_PARAM) vendorId: Vendor['id'],
     @Param(VendorProductImageParams.PRODUCT_ID_PARAM) productId: Product['id'],
-    @UploadedFiles() files: File[],
+    @UploadedFile() file: Express.Multer.File,
     @User() user: UserInfo,
   ) {
-    return this.productImagesService.uploadProductImages({
-      files,
+    return this.productImagesService.uploadProductImage({
+      file,
       user,
       productID: productId,
       vendorID: vendorId,

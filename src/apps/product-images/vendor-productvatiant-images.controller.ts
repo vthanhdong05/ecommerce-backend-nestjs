@@ -6,10 +6,10 @@ import {
   Param,
   Patch,
   Post,
-  UploadedFiles,
+  UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ProductImage, ProductVariant, Vendor } from '@prisma/client';
 import type { UserInfo } from 'src/common/decorators/user.decorator';
 import { User } from '../../common/decorators/user.decorator';
@@ -24,16 +24,16 @@ export class VendorProductVariantImagesController {
   constructor(private readonly productImagesService: ProductImagesService) {}
 
   @Post('upload')
-  @UseInterceptors(FilesInterceptor('files'))
-  uploadVariantImages(
+  @UseInterceptors(FileInterceptor('file'))
+  uploadVariantImage(
     @Param(VendorProductImageParams.VENDOR_ID_PARAM) vendorId: Vendor['id'],
     @Param(VendorProductImageParams.PRODUCT_ID_PARAM) productId: string,
     @Param(VendorProductImageParams.VARIANT_ID_PARAM) variantId: ProductVariant['id'],
-    @UploadedFiles() files: Express.Multer.File[],
+    @UploadedFile() file: Express.Multer.File,
     @User() user: UserInfo,
   ) {
-    return this.productImagesService.uploadProductImages({
-      files,
+    return this.productImagesService.uploadProductImage({
+      file,
       user,
       productID: productId,
       productVariantID: variantId,
@@ -58,11 +58,17 @@ export class VendorProductVariantImagesController {
   updateVariantImage(
     @Param(VendorProductImageParams.VENDOR_ID_PARAM) vendorId: Vendor['id'],
     @Param(VendorProductImageParams.PRODUCT_ID_PARAM) productId: string,
+    @Param(VendorProductImageParams.VARIANT_ID_PARAM) variantId: ProductVariant['id'],
     @Param('id') id: ProductImage['id'],
     @Body() updateDto: UpdateProductImageDto,
   ) {
     return this.productImagesService.updateProductImage({
-      where: { id, vendorID: vendorId, productID: productId },
+      where: {
+        id,
+        vendorID: vendorId,
+        productID: productId,
+        productVariantID: variantId,
+      },
       data: updateDto,
     });
   }

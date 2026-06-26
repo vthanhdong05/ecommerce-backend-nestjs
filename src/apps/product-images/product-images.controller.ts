@@ -9,10 +9,9 @@ import {
   Query,
   Res,
   UploadedFile,
-  UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import type { UserInfo } from '../../common/decorators/user.decorator';
 import { User } from '../../common/decorators/user.decorator';
@@ -29,8 +28,11 @@ export class ProductImagesController {
   constructor(private readonly productImagesService: ProductImagesService) {}
 
   @Post()
-  createProductImage(@Body() createProductImageDto: CreateProductImageDto) {
-    return this.productImagesService.createProductImage(createProductImageDto);
+  createProductImage(@Body() createProductImageDto: CreateProductImageDto, @User() user: UserInfo) {
+    return this.productImagesService.createProductImage({
+      ...createProductImageDto,
+      user,
+    } as any);
   }
 
   @Get('export')
@@ -55,12 +57,9 @@ export class ProductImagesController {
   }
 
   @Post('upload')
-  @UseInterceptors(FilesInterceptor('files'))
-  uploadProductImages(@UploadedFiles() files: File[], @User() user: UserInfo) {
-    return this.productImagesService.uploadProductImages({
-      files,
-      user,
-    });
+  @UseInterceptors(FileInterceptor('file'))
+  uploadProductImage(@UploadedFile() file: Express.Multer.File, @User() user: UserInfo) {
+    return this.productImagesService.uploadProductImage({ file, user });
   }
 
   @Get()

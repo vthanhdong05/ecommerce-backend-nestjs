@@ -1,5 +1,4 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { UploadApiResponse } from 'cloudinary';
 import type { UserInfo } from 'src/common/decorators/user.decorator';
@@ -16,7 +15,6 @@ import { CreateProductImageDto, ImportProductImagesDto } from './dto/create-prod
 import { ExportProductImagesDto } from './dto/get-product-images.dto';
 import { UpdateProductImageDto } from './dto/update-product-images.dto';
 import { ProductImage } from './entities/product-images.entity';
-import type { UploadProductImagePayload } from './interfaces/product-image.interface';
 
 @Injectable()
 export class ProductImagesService extends PrismaBaseService<'productImage'> {
@@ -28,7 +26,6 @@ export class ProductImagesService extends PrismaBaseService<'productImage'> {
     public prismaService: PrismaService,
     private excelUtilService: ExcelUtilService,
     private fileUtilService: FileUtilService,
-    private eventEmitter: EventEmitter2,
     private productService: ProductsService,
     private productVariantService: ProductVariantsService,
   ) {
@@ -207,56 +204,36 @@ export class ProductImagesService extends PrismaBaseService<'productImage'> {
     return data;
   }
 
-  async uploadProductImages({
-    files,
+  async uploadProductImage({
+    file,
     user,
     productID,
     productVariantID,
     vendorID,
   }: {
-    files: Express.Multer.File[];
+    file: Express.Multer.File;
     user: UserInfo;
     productID?: Product['id'];
     productVariantID?: ProductVariant['id'];
     vendorID?: Vendor['id'];
   }) {
+    // Verify ownership
     if (vendorID && productID) {
       await this.productService.verifyProductOwnership({ productID, vendorID });
     }
     if (productID && productVariantID) {
       await this.productVariantService.verifyVariantOwnership({ productVariantID, productID });
     }
-    for (const file of files) {
-      this.eventEmitter.emit('product-images.upload', {
-        file,
-        user,
-        productID,
-        productVariantID,
-        vendorID,
-      });
-    }
-    return { message: 'Uploading images success' };
-  }
 
-  @OnEvent('product-images.upload')
-  async uploadProductImagesEvent(
-    payload: UploadProductImagePayload & { vendorID?: string; productID?: string },
-  ) {
-    const { file, user, productID, productVariantID, vendorID } = payload;
-    // Nếu có vendorID + productID thì check quyền sở hữu product
-    if (vendorID && productID) {
-      await this.productService.verifyProductOwnership({ productID, vendorID });
-    }
-    if (productID && productVariantID) {
-      await this.productVariantService.verifyVariantOwnership({ productVariantID, productID });
-    }
     const fileName = this.fileUtilService.removeFileExtension(file.originalname);
     const productImageExist = await this.getProductImage({ name: fileName });
     if (productImageExist) {
       await this.fileUtilService.removeImage(file);
     }
+
     const { url, secure_url, display_name, created_at } =
       await this.fileUtilService.uploadImage<UploadApiResponse>(file);
+
     const dataUpsert = {
       name: display_name,
       description: display_name,
@@ -265,6 +242,7 @@ export class ProductImagesService extends PrismaBaseService<'productImage'> {
       ...(productVariantID && { productVariantID }),
       user,
     };
+
     return this.extended.upsert({
       create: { ...dataUpsert, createdAt: created_at },
       update: { ...dataUpsert },
