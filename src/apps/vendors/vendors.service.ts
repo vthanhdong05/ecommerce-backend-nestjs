@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { UserInfo } from 'src/common/decorators/user.decorator';
@@ -8,6 +8,7 @@ import { PrismaBaseService } from '../../common/services/prisma-base.service';
 import { ExcelUtilService } from '../../common/utils/excel-util/excel-util.service';
 import { PaginationUtilService } from '../../common/utils/pagination-util/pagination-util.service';
 import { QueryUtilService } from '../../common/utils/query-util/query-util.service';
+import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { CreateVendorDto, ImportVendorsDto } from './dto/create-vendor.dto';
 import { ExportVendorsDto, GetVendorsPaginationDto } from './dto/get-vendor.dto';
@@ -88,13 +89,21 @@ export class VendorsService extends PrismaBaseService<'vendor'> implements Optio
     return data;
   }
 
-  async updateVendorProfile(params: { vendorID: Vendor['id']; data: UpdateVendorDto }) {
-    const { vendorID, data: dataUpdate } = params;
-    const data = await this.extended.update({
+  async updateVendorProfile(params: {
+    vendorID: Vendor['id'];
+    userID: User['id'];
+    data: UpdateVendorDto;
+  }) {
+    const { vendorID, userID, data: dataUpdate } = params;
+    // Verify user có role trong vendor này không
+    const membership = await this.prismaService.userVendorRole.findUnique({
+      where: { userID_vendorID: { userID, vendorID } },
+    });
+    if (!membership) throw new NotFoundException('Vendor not found or you do not have permission');
+    return this.extended.update({
       where: { id: vendorID },
       data: dataUpdate,
     });
-    return data;
   }
 
   // lấy dữ liệu linh hoạt theo query (filter + select + limit)

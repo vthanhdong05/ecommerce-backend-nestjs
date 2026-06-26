@@ -1,4 +1,6 @@
 import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
+import type { UserInfo } from 'src/common/decorators/user.decorator';
+import { User } from 'src/common/decorators/user.decorator';
 import { SkipPermission } from '../auth/auth.decorator';
 import { Vendor } from '../vendors/entities/vendor.entity';
 import { VendorParam } from './consts/vendor.const';
@@ -15,14 +17,16 @@ export class VendorProfileController {
     return this.vendorsService.getVendorProfile(vendorId);
   }
 
-  @Patch(':id')
+  @Patch()
   @SkipPermission()
   updateVendorProfile(
     @Param(VendorParam.VENDOR_ID_PARAM) vendorId: Vendor['id'],
     @Body() updateVendorDto: UpdateVendorDto,
+    @User() user: UserInfo,
   ) {
     return this.vendorsService.updateVendorProfile({
       vendorID: vendorId,
+      userID: user.userID,
       data: updateVendorDto,
     });
   }
