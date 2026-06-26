@@ -1,13 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Post,
-  Req,
-  Res,
-  UploadedFile,
-  UseInterceptors,
-} from '@nestjs/common';
+import { Get, Post, Req, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { ExcelResponseInterceptor } from '../../common/interceptors/excel-response/excel-response.interceptor';
@@ -25,7 +16,7 @@ export class UserVendorRolesController {
 
   @Get('export')
   @UseInterceptors(ExcelResponseInterceptor)
-  async exportUserVendorRoles(@Body() params: ExportUserVendorRolesDto, @Res() res: Response) {
+  async exportUserVendorRoles(@Query() params: ExportUserVendorRolesDto, @Res() res: Response) {
     const workbook = await this.userVendorRolesService.exportUserVendorRoles(params);
     await workbook.xlsx.write(res);
     res.end();

@@ -71,19 +71,25 @@ export class VendorMembersController {
 
   @Patch(`:${VendorMemberParam.MEMBER_ID_PARAM}`)
   updateMember(
+    @Param(VendorMemberParam.VENDOR_ID_PARAM) vendorId: Vendor['id'],
     @Param(VendorMemberParam.MEMBER_ID_PARAM) id: UserVendorRole['id'],
     @Body() updateMemberDto: UpdateMemberDto,
     @User() user: UserInfo,
   ) {
     return this.userVendorRolesService.updateMember({
       id,
+      vendorID: vendorId,
       ...updateMemberDto,
       user,
     });
   }
 
   @Delete(`:${VendorMemberParam.MEMBER_ID_PARAM}`)
-  removeMember(@Param(VendorMemberParam.MEMBER_ID_PARAM) id: UserVendorRole['id']) {
-    return this.userVendorRolesService.removeMember(id);
+  removeMember(
+    @Param(VendorMemberParam.VENDOR_ID_PARAM) vendorId: Vendor['id'],
+    @Param(VendorMemberParam.MEMBER_ID_PARAM) id: UserVendorRole['id'],
+    @User() user: UserInfo,
+  ) {
+    return this.userVendorRolesService.removeMember(id, vendorId, user.userID);
   }
 }

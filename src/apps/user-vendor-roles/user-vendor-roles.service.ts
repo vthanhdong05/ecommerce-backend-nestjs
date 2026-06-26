@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, RoleType, UserVendorRoleStatus } from '@prisma/client';
 import type { UserInfo } from 'src/common/decorators/user.decorator';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -216,20 +216,25 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
 
   async updateMember({
     id,
+    vendorID,
     roleID,
     status,
   }: {
     id: string;
+    vendorID: Vendor['id'];
     roleID?: Role['id'];
     status?: UserVendorRoleStatus;
     user: UserInfo;
   }) {
-    // Nếu đổi role → check role phải là VENDOR type
+    // Verify record thuộc đúng vendor trong URL
+    const member = await this.extended.findFirst({ where: { id, vendorID } });
+    if (!member) throw new NotFoundException('Member not found');
+
     if (roleID) {
       const role = await this.rolesService.client.findFirst({
         where: { id: roleID, roleType: RoleType.VENDOR },
       });
-      if (!role) throw new BadRequestException(`Role không hợp lệ hoặc không phải VENDOR role`);
+      if (!role) throw new BadRequestException('Invalid role or not a VENDOR role');
     }
     return this.extended.update({
       where: { id },
@@ -240,10 +245,20 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
     });
   }
 
-  async removeMember(id: string) {
-    return await this.extended.delete({
-      where: { id },
+  async removeMember(id: string, vendorID: string, requestingUserID: string) {
+    // Verify record thuộc đúng vendor trong URL
+    const member = await this.extended.findFirst({
+      where: { id, vendorID },
+      include: { vendor: true },
     });
+    if (!member) throw new NotFoundException('Member not found');
+
+    // Ngăn owner tự xóa chính mình — owner là Vendor.userID
+    if (member.vendor.userID === requestingUserID && member.userID === requestingUserID) {
+      throw new BadRequestException('Owner cannot remove themselves from the vendor');
+    }
+
+    return this.prismaService.userVendorRole.delete({ where: { id } });
   }
 
   // export members
