@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { PrismaBaseService } from '../../common/services/prisma-base.service';
@@ -6,14 +6,8 @@ import { ExcelUtilService } from '../../common/utils/excel-util/excel-util.servi
 import { PermissionsService } from '../permissions/permissions.service';
 import { RolesService } from '../roles/roles.service';
 import { ImportRolePermissionsDto } from './dto/create-role-permission.dto';
-import {
-  ExportRolePermissionsDto,
-  PermissionsData,
-  PermissionsImportCreate,
-  RolesData,
-  RolesImportCreate,
-} from './dto/get-role-permission.dto';
 import { RolePermission } from './entities/role-permission.entity';
+import { ExportRolePermissionsDto } from './dto/get-role-permission.dto';
 
 @Injectable()
 export class RolePermissionsService extends PrismaBaseService<'rolePermission'> {
@@ -97,106 +91,42 @@ export class RolePermissionsService extends PrismaBaseService<'rolePermission'> 
     const rolePermissionSheetName = this.excelSheets[this.rolePermissionEntityName];
     const dataCreated = await this.excelUtilService.read(file);
     const dataImport = dataCreated[rolePermissionSheetName];
-    const { rolesImport, permissionsImport } = dataImport.reduce(
-      (acc, item) => {
-        const { roleName, permissionName, permissionKey } = item ?? {};
-        acc.rolesImport.add({ roleName });
-        acc.permissionsImport.add({ permissionName, permissionKey });
-        return acc;
-      },
-      {
-        rolesImport: new Set(),
-        permissionsImport: new Set(),
-      },
-    );
 
-    const rolesData: RolesData = []; // Gồm các roles đã tồn tại dưới database + các roles được tạo ra nếu chưa tồn tại
-    const rolesCreate: RolesImportCreate = [];
-    if (rolesImport.size > 0) {
-      const roles = await this.rolesService.client.findMany({
-        select: { id: true, name: true },
-      });
-      const roleNameListData = new Map();
-      for (const role of roles) {
-        roleNameListData.set(role.name, role);
+    // Lấy tất cả role/permission hiện có
+    const [allRoles, allPermissions] = await Promise.all([
+      this.rolesService.client.findMany({ select: { id: true, name: true } }),
+      this.permissionsService.client.findMany({ select: { id: true, name: true } }),
+    ]);
+
+    const roleNameMap = new Map(allRoles.map((r) => [r.name, r.id]));
+    const permissionNameMap = new Map(allPermissions.map((p) => [p.name, p.id]));
+
+    // Throw lỗi nếu role/permission chưa tồn tại — không tự tạo mới
+    const idsMapping = dataImport.map((item) => {
+      const { roleName, permissionName } = item ?? {};
+
+      const roleID = roleNameMap.get(roleName);
+      if (!roleID) {
+        throw new BadRequestException(`Role not found: "${roleName}". Please create it first.`);
       }
 
-      for (const roleImport of rolesImport) {
-        const { roleName } = roleImport;
-        const roleCurrent = roleNameListData.get(roleName);
-        if (roleCurrent) {
-          rolesData.push(roleCurrent);
-        } else {
-          rolesCreate.push({ name: roleName });
-        }
-      }
-      const rolesCreated = await this.rolesService.extended.createManyAndReturn({
-        data: rolesCreate.map((role) => ({ ...role, user })),
-        select: {
-          id: true,
-          name: true,
-        },
-      });
-      rolesData.push(...rolesCreated);
-    }
-
-    const permissionsData: PermissionsData = [];
-    const permissionsCreate: PermissionsImportCreate = [];
-    if (permissionsImport.size > 0) {
-      const permissions = await this.permissionsService.client.findMany({
-        select: { id: true, name: true },
-      });
-      const permissionNameListData = new Map();
-      for (const permission of permissions) {
-        permissionNameListData.set(permission.name, permission);
+      const permissionID = permissionNameMap.get(permissionName);
+      if (!permissionID) {
+        throw new BadRequestException(
+          `Permission not found: "${permissionName}". Please create it first.`,
+        );
       }
 
-      for (const permissionImport of permissionsImport) {
-        const { permissionName, permissionKey } = permissionImport;
-        const permissionCurrent = permissionNameListData.get(permissionName);
-        if (permissionCurrent) {
-          permissionsData.push(permissionCurrent);
-        } else {
-          permissionsCreate.push({ name: permissionName, key: permissionKey });
-        }
-      }
-
-      const permissionsCreated = await this.permissionsService.extended.createManyAndReturn({
-        data: permissionsCreate.map((permission) => ({
-          ...permission,
-          user,
-        })),
-        select: {
-          id: true,
-          name: true,
-        },
-      });
-      permissionsData.push(...permissionsCreated);
-    }
-
-    const roleNameListData = new Map();
-    for (const role of rolesData) {
-      roleNameListData.set(role.name, role.id);
-    }
-
-    const permissionNameListData = new Map();
-    for (const permission of permissionsData) {
-      permissionNameListData.set(permission.name, permission.id);
-    }
-
-    const idsMapping = dataImport.map((item) => ({
-      roleID: roleNameListData.get(item.roleName),
-      permissionID: permissionNameListData.get(item.permissionName),
-    }));
-
-    await this.extended.deleteMany({
-      where: { OR: idsMapping },
+      return { roleID, permissionID };
     });
 
-    const data = await this.extended.createMany({
-      data: idsMapping.map((item) => ({ ...item, user })),
+    // deleteMany + createMany trong cùng 1 transaction
+    return this.prismaService.$transaction(async (tx) => {
+      await tx.rolePermission.deleteMany({ where: { OR: idsMapping } });
+      return tx.rolePermission.createMany({
+        data: idsMapping.map((item) => ({ ...item, createdBy: user.userEmail })),
+      });
     });
-    return data;
   }
 
   // Lấy danh sách mapping từ database
