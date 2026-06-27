@@ -2,6 +2,7 @@ import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { Prisma, RoleType } from '@prisma/client';
 import { Actions } from 'src/common/guards/access-control/access-control.const';
+import { CacheHelperService } from 'src/common/utils/cache-util/cache-helper.service';
 import { normalizeRoute } from 'src/common/utils/data-format/data-fomat.util';
 import { ExcelUtilService } from 'src/common/utils/excel-util/excel-util.service';
 import { StringUtilService } from 'src/common/utils/string-util/string-util.service';
@@ -28,6 +29,7 @@ export class UsersService extends PrismaBaseService<'user'> implements Options<U
     private queryUtil: QueryUtilService,
     private stringUtilServive: StringUtilService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private cacheHelper: CacheHelperService,
   ) {
     super(prismaService, 'user');
   }
@@ -239,18 +241,10 @@ export class UsersService extends PrismaBaseService<'user'> implements Options<U
 
   async invalidatePermissionCache(userID?: string) {
     const pattern = userID ? `permission:${userID}:*` : 'permission:*';
-    const redisClient = (this.cacheManager.stores[0] as any).client;
-    const keys: string[] = await redisClient.keys(pattern);
-    if (keys.length > 0) {
-      await Promise.all(keys.map((key: string) => this.cacheManager.del(key)));
-    }
+    await this.cacheHelper.deleteByPattern(pattern);
   }
 
   async invalidateUsersCache() {
-    const redisClient = (this.cacheManager.stores[0] as any).client;
-    const keys: string[] = await redisClient.keys('users:list:*');
-    if (keys.length > 0) {
-      await Promise.all(keys.map((key: string) => this.cacheManager.del(key)));
-    }
+    await this.cacheHelper.deleteByPattern('users:list:*');
   }
 }

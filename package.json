@@ -24,6 +24,7 @@
     "prisma:generate:zod": "npx prisma generate --generator zod"
   },
   "dependencies": {
+    "@keyv/redis": "^5.1.6",
     "@nestjs-modules/mailer": "^1.10.3",
     "@nestjs/cache-manager": "^3.1.2",
     "@nestjs/common": "^11.0.1",
@@ -41,7 +42,6 @@
     "@prisma/client": "^6.15.0",
     "bcrypt": "^6.0.0",
     "cache-manager": "^7.2.8",
-    "cache-manager-redis-yet": "^5.1.5",
     "cloudinary": "^2.10.0",
     "cookie-parser": "^1.4.7",
     "exceljs": "^4.4.0",

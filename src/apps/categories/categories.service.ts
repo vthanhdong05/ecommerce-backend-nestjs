@@ -12,6 +12,7 @@ import { CreateCategoryDto, ImportCategoriesDto } from './dto/create-category.dt
 import { ExportCategoriesDto, GetCategoriesPaginationDto } from './dto/get-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { Category } from './entities/category.entity';
+import { CacheHelperService } from 'src/common/utils/cache-util/cache-helper.service';
 
 @Injectable()
 export class CategoriesService extends PrismaBaseService<'category'> implements Options<Category> {
@@ -25,6 +26,7 @@ export class CategoriesService extends PrismaBaseService<'category'> implements 
     private paginationUtilService: PaginationUtilService,
     private queryUtil: QueryUtilService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private cacheHelper: CacheHelperService,
   ) {
     super(prismaService, 'category');
   }
@@ -75,11 +77,7 @@ export class CategoriesService extends PrismaBaseService<'category'> implements 
   }
 
   private async invalidateCategoriesCache() {
-    const redisClient = (this.cacheManager.stores[0] as any).client;
-    const keys: string[] = await redisClient.keys('categories:list:*');
-    if (keys.length > 0) {
-      await Promise.all(keys.map((key) => this.cacheManager.del(key)));
-    }
+    await this.cacheHelper.deleteByPattern('categories:list:*');
   }
 
   async updateCategory(params: {

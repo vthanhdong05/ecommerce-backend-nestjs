@@ -3,14 +3,21 @@ import { StringUtilService } from 'src/common/utils/string-util/string-util.serv
 import { ExcelUtilModule } from '../../common/utils/excel-util/excel-util.module';
 import { PaginationUtilService } from '../../common/utils/pagination-util/pagination-util.service';
 import { UsersService } from '../users/users.service';
+import { VendorProfileController } from './vendor-profile.controller';
 import { VendorsController } from './vendors.controller';
 import { VendorsService } from './vendors.service';
-import { VendorProfileController } from './vendor-profile.controller';
+import { CacheHelperService } from 'src/common/utils/cache-util/cache-helper.service';
 
 @Module({
   imports: [ExcelUtilModule],
   controllers: [VendorsController, VendorProfileController],
-  providers: [VendorsService, PaginationUtilService, UsersService, StringUtilService],
+  providers: [
+    VendorsService,
+    PaginationUtilService,
+    UsersService,
+    StringUtilService,
+    CacheHelperService,
+  ],
   exports: [VendorsService],
 })
 export class VendorsModule {}
