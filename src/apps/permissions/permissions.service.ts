@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { UserInfo } from 'src/common/decorators/user.decorator';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -128,7 +128,14 @@ export class PermissionsService
   }
 
   async deletePermission(where: Prisma.PermissionWhereUniqueInput) {
-    const data = await this.extended.softDelete(where);
-    return data;
+    const inUse = await this.prismaService.rolePermission.findFirst({
+      where: { permissionID: where.id as string },
+    });
+    if (inUse) {
+      throw new BadRequestException(
+        'Cannot delete a permission assigned to a role. Remove it from all roles first.',
+      );
+    }
+    return this.extended.softDelete(where);
   }
 }

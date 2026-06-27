@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { UserInfo } from 'src/common/decorators/user.decorator';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { GetOptionsParams, Options } from '../../common/query/options.interface';
 import { PrismaBaseService } from '../../common/services/prisma-base.service';
@@ -58,11 +59,10 @@ export class RolesService extends PrismaBaseService<'role'> implements Options<R
     return data;
   }
 
-  async createRole(createRoleDto: CreateRoleDto) {
-    const data = await this.extended.create({
-      data: createRoleDto,
+  async createRole(createRoleDto: CreateRoleDto, user: UserInfo) {
+    return this.extended.create({
+      data: { ...createRoleDto, user } as any,
     });
-    return data;
   }
 
   async updateRole(params: { where: Prisma.RoleWhereUniqueInput; data: UpdateRoleDto }) {
@@ -119,7 +119,23 @@ export class RolesService extends PrismaBaseService<'role'> implements Options<R
   }
 
   async deleteRole(where: Prisma.RoleWhereUniqueInput) {
-    const data = await this.extended.softDelete(where);
-    return data;
+    const [rolePermission, userSystemRole, userVendorRole] = await Promise.all([
+      this.prismaService.rolePermission.findFirst({ where: { roleID: where.id as string } }),
+      this.prismaService.userSystemRole.findFirst({ where: { roleID: where.id as string } }),
+      this.prismaService.userVendorRole.findFirst({ where: { roleID: where.id as string } }),
+    ]);
+
+    if (rolePermission) {
+      throw new BadRequestException(
+        'Cannot delete a role that has permissions assigned. Remove all permissions first.',
+      );
+    }
+    if (userSystemRole || userVendorRole) {
+      throw new BadRequestException(
+        'Cannot delete a role that is assigned to users. Remove all user assignments first.',
+      );
+    }
+
+    return this.extended.softDelete(where);
   }
 }

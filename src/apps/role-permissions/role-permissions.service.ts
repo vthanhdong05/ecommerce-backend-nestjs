@@ -6,8 +6,8 @@ import { ExcelUtilService } from '../../common/utils/excel-util/excel-util.servi
 import { PermissionsService } from '../permissions/permissions.service';
 import { RolesService } from '../roles/roles.service';
 import { ImportRolePermissionsDto } from './dto/create-role-permission.dto';
-import { RolePermission } from './entities/role-permission.entity';
 import { ExportRolePermissionsDto } from './dto/get-role-permission.dto';
+import { RolePermission } from './entities/role-permission.entity';
 
 @Injectable()
 export class RolePermissionsService extends PrismaBaseService<'rolePermission'> {
@@ -91,35 +91,28 @@ export class RolePermissionsService extends PrismaBaseService<'rolePermission'> 
     const rolePermissionSheetName = this.excelSheets[this.rolePermissionEntityName];
     const dataCreated = await this.excelUtilService.read(file);
     const dataImport = dataCreated[rolePermissionSheetName];
-
     // Lấy tất cả role/permission hiện có
     const [allRoles, allPermissions] = await Promise.all([
       this.rolesService.client.findMany({ select: { id: true, name: true } }),
       this.permissionsService.client.findMany({ select: { id: true, name: true } }),
     ]);
-
     const roleNameMap = new Map(allRoles.map((r) => [r.name, r.id]));
     const permissionNameMap = new Map(allPermissions.map((p) => [p.name, p.id]));
-
     // Throw lỗi nếu role/permission chưa tồn tại — không tự tạo mới
     const idsMapping = dataImport.map((item) => {
       const { roleName, permissionName } = item ?? {};
-
       const roleID = roleNameMap.get(roleName);
       if (!roleID) {
         throw new BadRequestException(`Role not found: "${roleName}". Please create it first.`);
       }
-
       const permissionID = permissionNameMap.get(permissionName);
       if (!permissionID) {
         throw new BadRequestException(
           `Permission not found: "${permissionName}". Please create it first.`,
         );
       }
-
       return { roleID, permissionID };
     });
-
     // deleteMany + createMany trong cùng 1 transaction
     return this.prismaService.$transaction(async (tx) => {
       await tx.rolePermission.deleteMany({ where: { OR: idsMapping } });
