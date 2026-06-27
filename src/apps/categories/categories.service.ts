@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { UserInfo } from 'src/common/decorators/user.decorator';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -23,6 +24,7 @@ export class CategoriesService extends PrismaBaseService<'category'> implements 
     public prismaService: PrismaService,
     private paginationUtilService: PaginationUtilService,
     private queryUtil: QueryUtilService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {
     super(prismaService, 'category');
   }
@@ -43,6 +45,9 @@ export class CategoriesService extends PrismaBaseService<'category'> implements 
   }
 
   async getCategories({ page, itemPerPage }: GetCategoriesPaginationDto) {
+    const cacheKey = `categories:list:${page}:${itemPerPage}`;
+    const cached = await this.cacheManager.get(cacheKey);
+    if (cached) return cached;
     const totalItems = await this.extended.count();
     const paging = this.paginationUtilService.paging({
       page,
@@ -53,8 +58,8 @@ export class CategoriesService extends PrismaBaseService<'category'> implements 
       skip: paging.skip,
       take: itemPerPage,
     });
-
     const data = paging.format(list);
+    await this.cacheManager.set(cacheKey, data, 5 * 60 * 1000); // 5 phút
     return data;
   }
 
@@ -65,7 +70,16 @@ export class CategoriesService extends PrismaBaseService<'category'> implements 
         user,
       } as any,
     });
+    await this.invalidateCategoriesCache();
     return data;
+  }
+
+  private async invalidateCategoriesCache() {
+    const redisClient = (this.cacheManager.stores[0] as any).client;
+    const keys: string[] = await redisClient.keys('categories:list:*');
+    if (keys.length > 0) {
+      await Promise.all(keys.map((key) => this.cacheManager.del(key)));
+    }
   }
 
   async updateCategory(params: {

@@ -54,23 +54,15 @@ export class UsersService extends PrismaBaseService<'user'> implements Options<U
   }
 
   async getUsers({ page, itemPerPage }: GetUsersPaginationDto) {
-    const usersCacheKey = this.getUsers.name;
-    const usersCached = await this.cacheManager.get(usersCacheKey);
-    if (usersCached) return usersCached;
-
+    const cacheKey = `users:list:${page}:${itemPerPage}`;
+    const cached = await this.cacheManager.get(cacheKey);
+    if (cached) return cached;
     const totalItems = await this.extended.count();
-    const paging = this.paginationUtilService.paging({
-      page,
-      itemPerPage,
-      totalItems,
-    });
-    const list = await this.extended.findMany({
-      skip: paging.skip,
-      take: itemPerPage,
-    });
-
+    const paging = this.paginationUtilService.paging({ page, itemPerPage, totalItems });
+    const list = await this.extended.findMany({ skip: paging.skip, take: itemPerPage });
     const data = paging.format(list);
-    await this.cacheManager.set(usersCacheKey, data);
+    // TTL 60 giây
+    await this.cacheManager.set(cacheKey, data, 60 * 1000);
     return data;
   }
 
@@ -185,7 +177,10 @@ export class UsersService extends PrismaBaseService<'user'> implements Options<U
   // (Kiểm tra user có quyền cụ thể không)
   async isExistPermissionKey({ userID, permissionKey, vendorID }: IsExistPermissionKeyDto) {
     if (!permissionKey) return false;
-
+    const cacheKey = `permission:${userID}:${permissionKey}:${vendorID ?? 'system'}`;
+    // Check cache trước — tránh query DB mỗi request
+    const cached = await this.cacheManager.get<boolean>(cacheKey);
+    if (cached !== null && cached !== undefined) return cached;
     const user = await this.extended.findFirst({
       where: { id: userID },
       select: {
@@ -195,26 +190,19 @@ export class UsersService extends PrismaBaseService<'user'> implements Options<U
             role: {
               select: {
                 rolePermissions: {
-                  select: {
-                    permission: { select: { key: true } },
-                  },
+                  select: { permission: { select: { key: true } } },
                 },
               },
             },
           },
         },
         userVendorRoles: {
-          where: {
-            status: 'active',
-            ...(vendorID && { vendorID }), // ← filter đúng vendor
-          },
+          where: { status: 'active', ...(vendorID && { vendorID }) },
           select: {
             role: {
               select: {
                 rolePermissions: {
-                  select: {
-                    permission: { select: { key: true } },
-                  },
+                  select: { permission: { select: { key: true } } },
                 },
               },
             },
@@ -222,33 +210,47 @@ export class UsersService extends PrismaBaseService<'user'> implements Options<U
         },
       },
     });
-
-    if (!user) return false;
-
+    if (!user) {
+      await this.cacheManager.set(cacheKey, false, 30 * 1000);
+      return false;
+    }
     const allRoles = [...(user.userSystemRoles ?? []), ...(user.userVendorRoles ?? [])];
-
-    return allRoles.some((item) =>
+    const result = allRoles.some((item) =>
       item.role?.rolePermissions?.some((rp) => {
         const key = rp.permission?.key;
         if (!key) return false;
-
         const [permRoute, permAction] = key.split('_');
         const [reqRoute] = permissionKey.split('_');
-
         const cleanPermRoute = normalizeRoute(permRoute);
         const cleanReqRoute = normalizeRoute(reqRoute);
-
         if (key === permissionKey) return true;
-
         if (
           permAction === `[${Actions.MANAGE}]` &&
           (cleanReqRoute === cleanPermRoute || cleanReqRoute.startsWith(cleanPermRoute + '/'))
-        ) {
+        )
           return true;
-        }
-
         return false;
       }),
     );
+    // TTL 30 giây — ngắn vì permission có thể thay đổi bất kỳ lúc nào
+    await this.cacheManager.set(cacheKey, result, 30 * 1000);
+    return result;
+  }
+
+  async invalidatePermissionCache(userID?: string) {
+    const pattern = userID ? `permission:${userID}:*` : 'permission:*';
+    const redisClient = (this.cacheManager.stores[0] as any).client;
+    const keys: string[] = await redisClient.keys(pattern);
+    if (keys.length > 0) {
+      await Promise.all(keys.map((key: string) => this.cacheManager.del(key)));
+    }
+  }
+
+  async invalidateUsersCache() {
+    const redisClient = (this.cacheManager.stores[0] as any).client;
+    const keys: string[] = await redisClient.keys('users:list:*');
+    if (keys.length > 0) {
+      await Promise.all(keys.map((key: string) => this.cacheManager.del(key)));
+    }
   }
 }

@@ -5,6 +5,7 @@ import { PrismaBaseService } from '../../common/services/prisma-base.service';
 import { ExcelUtilService } from '../../common/utils/excel-util/excel-util.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { RolesService } from '../roles/roles.service';
+import { UsersService } from '../users/users.service';
 import { ImportRolePermissionsDto } from './dto/create-role-permission.dto';
 import { ExportRolePermissionsDto } from './dto/get-role-permission.dto';
 import { RolePermission } from './entities/role-permission.entity';
@@ -20,6 +21,7 @@ export class RolePermissionsService extends PrismaBaseService<'rolePermission'> 
     private excelUtilService: ExcelUtilService,
     private rolesService: RolesService,
     private permissionsService: PermissionsService,
+    private usersService: UsersService,
   ) {
     super(prismaService, 'rolePermission');
   }
@@ -114,12 +116,17 @@ export class RolePermissionsService extends PrismaBaseService<'rolePermission'> 
       return { roleID, permissionID };
     });
     // deleteMany + createMany trong cùng 1 transaction
-    return this.prismaService.$transaction(async (tx) => {
+    const result = await this.prismaService.$transaction(async (tx) => {
       await tx.rolePermission.deleteMany({ where: { OR: idsMapping } });
       return tx.rolePermission.createMany({
         data: idsMapping.map((item) => ({ ...item, createdBy: user.userEmail })),
       });
     });
+    // Xóa toàn bộ permission cache sau khi transaction thành công
+    // Không biết user nào bị ảnh hưởng → xóa hết
+    await this.usersService.invalidatePermissionCache();
+
+    return result;
   }
 
   // Lấy danh sách mapping từ database

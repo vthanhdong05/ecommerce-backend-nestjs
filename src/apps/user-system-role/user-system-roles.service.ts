@@ -99,15 +99,18 @@ export class UserSystemRolesService extends PrismaBaseService<'userSystemRole'> 
       return { userID, roleID };
     });
     // deleteMany + createMany trong cùng 1 transaction — rollback nếu createMany lỗi
-    return this.prismaService.$transaction(async (tx) => {
+    const result = await this.prismaService.$transaction(async (tx) => {
       await tx.userSystemRole.deleteMany({ where: { OR: idsMapping } });
       return tx.userSystemRole.createMany({
         data: idsMapping.map((item) => ({
           ...item,
-          createdBy: user.userEmail, // fix từ user (object) → user.userEmail (string)
+          createdBy: user.userEmail,
         })),
       });
     });
+    // Xóa toàn bộ permission cache sau khi transaction thành công
+    await this.usersService.invalidatePermissionCache();
+    return result;
   }
 
   // Lấy danh sách mapping từ database

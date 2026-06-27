@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
-import { RolePermissionsService } from './role-permissions.service';
-import { RolePermissionsController } from './role-permissions.controller';
 import { ExcelUtilModule } from '../../common/utils/excel-util/excel-util.module';
-import { RolesModule } from '../roles/roles.module';
 import { PermissionsModule } from '../permissions/permissions.module';
+import { RolesModule } from '../roles/roles.module';
+import { UsersModule } from '../users/users.module';
+import { RolePermissionsController } from './role-permissions.controller';
+import { RolePermissionsService } from './role-permissions.service';
 
 @Module({
-  imports: [ExcelUtilModule, RolesModule, PermissionsModule],
+  imports: [ExcelUtilModule, RolesModule, PermissionsModule, UsersModule],
   controllers: [RolePermissionsController],
   providers: [RolePermissionsService],
 })
