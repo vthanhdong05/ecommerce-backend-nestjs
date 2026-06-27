@@ -1,3 +1,5 @@
 export enum CacheEnvs {
   CACHE_INTERNAL_TTL = 'CACHE_INTERNAL_TTL',
+  REDIS_HOST = 'REDIS_HOST',
+  REDIS_PORT = 'REDIS_PORT',
 }

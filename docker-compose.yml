@@ -21,6 +21,23 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis_nestjs_ecommerce_dev
+    restart: unless-stopped
+    ports:
+      - '${REDIS_PORT}:6379'
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes # persist data qua restart
+    networks:
+      - ecommerce_net
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   app:
     build:
       context: .
@@ -32,11 +49,15 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:${DB_PORT}/${DB_NAME}?schema=public
+      REDIS_HOST: redis # trỏ tới service name, không phải localhost
+      REDIS_PORT: 6379
     ports:
       - '${PORT}:3000'
     depends_on:
       postgres:
-        condition: service_healthy # app chỉ start khi PostgreSQL healthcheck pass
+        condition: service_healthy
+      redis:
+        condition: service_healthy # app chỉ start khi Redis healthcheck pass
     networks:
       - ecommerce_net
     healthcheck:
@@ -47,6 +68,7 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
 
 networks:
   ecommerce_net:

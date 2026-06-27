@@ -40,6 +40,10 @@ const baseEnvSchema = z.object({
   MAIL_PORT: zodWarnOptional(z.string(), 'MAIL_PORT'),
 
   DATABASE_URL: z.string().url(),
+
+  REDIS_HOST: z.string().default('localhost'),
+  REDIS_PORT: z.coerce.number().default(6379),
+  REDIS_TTL: z.coerce.number().default(60000),
 });
 
 const envSchema = baseEnvSchema.transform((data) => {
