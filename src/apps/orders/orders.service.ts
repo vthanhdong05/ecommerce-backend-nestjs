@@ -274,6 +274,67 @@ export class OrdersService extends PrismaBaseService<'order'> {
     });
   }
 
+  async cancelOrderItemsByVendor({ id, vendorID }: { id: string; vendorID: string }) {
+    const order = await this.extended.findFirst({
+      where: { id, orderItems: { some: { vendorID } } },
+      include: { orderItems: true },
+    });
+
+    if (!order) throw new NotFoundException('Order not found');
+
+    const cancellableStatuses: OrderStatus[] = [OrderStatus.pending, OrderStatus.confirmed];
+    if (!cancellableStatuses.includes(order.status)) {
+      throw new BadRequestException(
+        `Cannot cancel items for an order with status "${order.status}"`,
+      );
+    }
+
+    const vendorItems = order.orderItems.filter((item) => item.vendorID === vendorID);
+    const remainingItems = order.orderItems.filter((item) => item.vendorID !== vendorID);
+
+    return this.prismaService.$transaction(async (tx) => {
+      // 1. Hoàn lại stock cho từng item của vendor
+      for (const item of vendorItems) {
+        await tx.productVariant.update({
+          where: { id: item.productVariantID },
+          data: { stockQuantity: { increment: item.quantity } },
+        });
+      }
+
+      // 2. Xóa OrderItem của vendor
+      await tx.orderItem.deleteMany({
+        where: { orderID: id, vendorID },
+      });
+
+      // 3. Nếu không còn item nào → cancel toàn bộ Order
+      if (remainingItems.length === 0) {
+        return tx.order.update({
+          where: { id },
+          data: { status: OrderStatus.cancelled, totalAmount: 0, subtotal: 0 },
+        });
+      }
+
+      // 4. Tính lại subtotal/totalAmount từ items còn lại
+      const newSubtotal = remainingItems.reduce((sum, item) => sum + Number(item.totalPrice), 0);
+
+      // Tính lại discountAmount theo tỉ lệ (nếu có promotion)
+      const originalSubtotal = Number(order.subtotal);
+      const discountRatio =
+        originalSubtotal > 0 ? Number(order.discountAmount) / originalSubtotal : 0;
+      const newDiscountAmount = Math.min(Math.round(newSubtotal * discountRatio), newSubtotal);
+      const newTotalAmount = Math.max(0, newSubtotal - newDiscountAmount);
+
+      return tx.order.update({
+        where: { id },
+        data: {
+          subtotal: newSubtotal,
+          discountAmount: newDiscountAmount,
+          totalAmount: newTotalAmount,
+        },
+      });
+    });
+  }
+
   async exportOrders({ ids }: ExportOrdersDto) {
     const orders = await this.extended.export({ where: { id: { in: ids } } });
     return this.excelUtilService.generateExcel({

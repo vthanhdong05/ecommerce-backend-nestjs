@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Query, UsePipes } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Query, UsePipes } from '@nestjs/common';
 import { Order } from '@prisma/client';
 import { ParseParamsPaginationPipe } from 'src/common/pipes/parse-params-pagination.pipe';
 import { SkipPermission } from '../auth/auth.decorator';
@@ -42,6 +42,18 @@ export class VendorOrdersController {
       id,
       vendorID: vendorId,
       status: updateStatusDto.status,
+    });
+  }
+
+  @Delete(`:id/items`)
+  @SkipPermission()
+  cancelOrderItemsByVendor(
+    @Param(VendorOrderParam.VENDOR_ID_PARAM) vendorId: Vendor['id'],
+    @Param('id') id: Order['id'],
+  ) {
+    return this.ordersService.cancelOrderItemsByVendor({
+      id,
+      vendorID: vendorId,
     });
   }
 }
