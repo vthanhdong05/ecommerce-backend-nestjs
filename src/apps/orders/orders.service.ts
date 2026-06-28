@@ -132,6 +132,7 @@ export class OrdersService extends PrismaBaseService<'order'> {
       );
       // 4. Tính subtotal từ các OrderItem vừa tạo
       const subtotal = orderItems.reduce((sum, item) => sum + Number(item.totalPrice), 0);
+      const totalQuantity = orderItems.reduce((sum, item) => sum + item.quantity, 0);
       let discountAmount = 0;
       const shippingAmount = 0; // TODO: tính phí ship thật khi có Shipping module
       // 5. Validate + áp dụng mã giảm giá đơn hàng (scope: ORDER)
@@ -140,6 +141,7 @@ export class OrdersService extends PrismaBaseService<'order'> {
           promotionCode,
           subtotal,
           tx,
+          totalQuantity,
         );
         discountAmount += result.discountAmount;
         await this.orderPromotionsService.createOrderPromotion(
@@ -157,6 +159,7 @@ export class OrdersService extends PrismaBaseService<'order'> {
           shippingPromotionCode,
           shippingAmount, // base là phí ship, không phải subtotal
           tx,
+          totalQuantity,
         );
         discountAmount += result.discountAmount;
         await this.orderPromotionsService.createOrderPromotion(

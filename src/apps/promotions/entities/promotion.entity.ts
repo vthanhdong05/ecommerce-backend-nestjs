@@ -9,6 +9,7 @@ export class Promotion implements PromotionPrisma {
   type!: $Enums.PromotionType;
   scope!: $Enums.PromotionScope;
   value!: Decimal;
+  minQuantity!: number | null;
   usageLimit!: number | null;
   startDate!: Date;
   endDate!: Date | null;

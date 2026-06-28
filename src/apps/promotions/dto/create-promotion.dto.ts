@@ -10,6 +10,7 @@ export const CreatePromotionSchema = z
     type: z.nativeEnum(PromotionType),
     scope: z.nativeEnum(PromotionScope),
     value: z.coerce.number().positive({ message: 'Value must be greater than 0' }),
+    minQuantity: z.coerce.number().int().positive().optional().nullable(),
     usageLimit: z.coerce.number().int().positive().optional().nullable(),
     startDate: z.string().datetime({ message: 'Invalid startDate format' }), // đổi từ z.coerce.date()
     endDate: z.string().datetime({ message: 'Invalid endDate format' }).optional().nullable(), // đổi từ z.coerce.date()
@@ -23,6 +24,16 @@ export const CreatePromotionSchema = z
       return true;
     },
     { message: 'buy_x_get_y promotion type cannot be applied to SHIPPING scope' },
+  )
+  .refine(
+    (data) => {
+      // buy_x_get_y bắt buộc phải có minQuantity
+      if (data.type === PromotionType.buy_x_get_y && !data.minQuantity) {
+        return false;
+      }
+      return true;
+    },
+    { message: 'buy_x_get_y promotion type requires minQuantity' },
   )
   .refine(
     (data) => {

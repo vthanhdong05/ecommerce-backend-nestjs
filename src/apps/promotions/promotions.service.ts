@@ -110,6 +110,7 @@ export class PromotionsService
     code: string,
     subtotal: number,
     tx: Prisma.TransactionClient,
+    totalQuantity?: number,
   ): Promise<{ promotionID: string; discountAmount: number; scope: PromotionScope }> {
     const promotion = await tx.promotion.findUnique({ where: { code } });
 
@@ -140,11 +141,22 @@ export class PromotionsService
         // không giảm nhiều hơn subtotal (tránh số âm)
         discountAmount = Math.min(value, subtotal);
         break;
-      case PromotionType.buy_x_get_y:
-        // TODO: buy_x_get_y cần thêm logic riêng khi biết rõ cách tính (vd: mua 2 tặng 1)
-        // Tạm thời xử lý như fixed_amount, note backlog
+      case PromotionType.buy_x_get_y: {
+        const minQty = promotion.minQuantity ?? 0;
+        const qty = totalQuantity ?? 0;
+
+        if (qty < minQty) {
+          // Không đủ số lượng → không giảm, không throw lỗi
+          // Client biết qua discountAmount = 0
+          discountAmount = 0;
+          break;
+        }
+
+        // Đủ số lượng → giảm theo value (fixed_amount)
+        // Ví dụ: mua từ 3 sản phẩm → giảm 50.000đ
         discountAmount = Math.min(value, subtotal);
         break;
+      }
     }
     return { promotionID: promotion.id, discountAmount, scope: promotion.scope };
   }

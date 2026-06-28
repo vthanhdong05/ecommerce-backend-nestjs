@@ -356,6 +356,7 @@ model Promotion {
   type        PromotionType
   scope       PromotionScope
   value       Decimal
+  minQuantity Int? // số lượng tối thiểu để áp dụng buy_x_get_y
   usageLimit  Int?
   startDate   DateTime        @default(now())
   endDate     DateTime?
