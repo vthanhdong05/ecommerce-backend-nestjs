@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
-import { OrderStatus, Prisma } from '@prisma/client';
+import { OrderStatus, Prisma, VendorStatus } from '@prisma/client';
 import { UserInfo } from 'src/common/decorators/user.decorator';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { GetOptionsParams, Options } from '../../common/query/options.interface';
@@ -51,6 +51,30 @@ export class VendorsService extends PrismaBaseService<'vendor'> implements Optio
     const data = await this.extended.findUnique({
       where: { id: vendorID },
     });
+    return data;
+  }
+
+  // Trang public shop — chỉ trả thông tin được phép public
+  async getShopInfo(vendorID: Vendor['id']) {
+    const data = await this.extended.findUnique({
+      where: { id: vendorID },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        logoUrl: true,
+        totalProducts: true,
+        totalOrders: true,
+        status: true,
+        createdAt: true,
+        // Không trả: userID, taxCode, createdBy... (thông tin nội bộ)
+      },
+    });
+    if (!data) throw new NotFoundException('Shop not found');
+    if (data.status !== VendorStatus.active) {
+      throw new NotFoundException('Shop is not available');
+    }
     return data;
   }
 
