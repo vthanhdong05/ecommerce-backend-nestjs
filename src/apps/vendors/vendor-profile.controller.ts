@@ -17,6 +17,12 @@ export class VendorProfileController {
     return this.vendorsService.getVendorProfile(vendorId);
   }
 
+  @Get('statistics')
+  @SkipPermission()
+  getVendorStatistics(@Param('id') id: Vendor['id']) {
+    return this.vendorsService.getVendorStatistics(id);
+  }
+
   @Patch()
   @SkipPermission()
   updateVendorProfile(

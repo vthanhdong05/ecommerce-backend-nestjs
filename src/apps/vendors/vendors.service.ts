@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
-import { Prisma } from '@prisma/client';
+import { OrderStatus, Prisma } from '@prisma/client';
 import { UserInfo } from 'src/common/decorators/user.decorator';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { GetOptionsParams, Options } from '../../common/query/options.interface';
@@ -165,6 +165,110 @@ export class VendorsService extends PrismaBaseService<'vendor'> implements Optio
   async deleteVendor(where: Prisma.VendorWhereUniqueInput) {
     const data = await this.extended.softDelete(where);
     return data;
+  }
+
+  async getVendorStatistics(vendorID: string) {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfQuarter = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    const [revenueThisMonth, revenueThisQuarter, revenueThisYear, topProducts, ordersToPackToday] =
+      await Promise.all([
+        // 1. Doanh thu theo tháng/quý/năm — tính từ OrderItem của vendor
+        this.prismaService.orderItem.aggregate({
+          where: {
+            vendorID,
+            order: {
+              status: { notIn: [OrderStatus.cancelled, OrderStatus.refunded] },
+              createdAt: { gte: startOfMonth },
+            },
+          },
+          _sum: { totalPrice: true },
+        }),
+        this.prismaService.orderItem.aggregate({
+          where: {
+            vendorID,
+            order: {
+              status: { notIn: [OrderStatus.cancelled, OrderStatus.refunded] },
+              createdAt: { gte: startOfQuarter },
+            },
+          },
+          _sum: { totalPrice: true },
+        }),
+        this.prismaService.orderItem.aggregate({
+          where: {
+            vendorID,
+            order: {
+              status: { notIn: [OrderStatus.cancelled, OrderStatus.refunded] },
+              createdAt: { gte: startOfYear },
+            },
+          },
+          _sum: { totalPrice: true },
+        }),
+        // 2. Sản phẩm bán chạy — group theo productVariantID, sum quantity
+        this.prismaService.orderItem.groupBy({
+          by: ['productVariantID'],
+          where: {
+            vendorID,
+            order: { status: { notIn: [OrderStatus.cancelled, OrderStatus.refunded] } },
+          },
+          _sum: { quantity: true, totalPrice: true },
+          orderBy: { _sum: { quantity: 'desc' } },
+          take: 10,
+        }),
+        // 3. Đơn cần đóng gói hôm nay — status: confirmed
+        this.prismaService.order.findMany({
+          where: {
+            orderItems: { some: { vendorID } },
+            status: OrderStatus.confirmed,
+          },
+          include: {
+            orderItems: { where: { vendorID } },
+            orderAddresses: { where: { type: 'shipping' } },
+          },
+        }),
+      ]);
+    // Lấy thông tin variant cho top products
+    const variantIDs = topProducts.map((p) => p.productVariantID);
+    const variants = await this.prismaService.productVariant.findMany({
+      where: { id: { in: variantIDs } },
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        product: { select: { id: true, name: true } },
+      },
+    });
+    const variantMap = new Map(variants.map((v) => [v.id, v]));
+    return {
+      revenue: {
+        thisMonth: Number(revenueThisMonth._sum.totalPrice ?? 0),
+        thisQuarter: Number(revenueThisQuarter._sum.totalPrice ?? 0),
+        thisYear: Number(revenueThisYear._sum.totalPrice ?? 0),
+      },
+      topProducts: topProducts.map((item) => {
+        const variant = variantMap.get(item.productVariantID);
+        return {
+          productVariantID: item.productVariantID,
+          productName: variant?.product.name ?? 'Unknown',
+          variantName: variant?.name ?? null,
+          sku: variant?.sku ?? null,
+          totalQuantitySold: item._sum.quantity ?? 0,
+          totalRevenue: Number(item._sum.totalPrice ?? 0),
+        };
+      }),
+      ordersToPackToday: ordersToPackToday.map((order) => ({
+        orderID: order.id,
+        orderNumber: order.orderNumber,
+        shippingAddress: order.orderAddresses[0] ?? null,
+        items: order.orderItems.map((item) => ({
+          productVariantID: item.productVariantID,
+          quantity: item.quantity,
+          unitPrice: Number(item.unitPrice),
+          snapshot: item.productVariantSnapshot,
+        })),
+      })),
+    };
   }
 
   @OnEvent('product.created')
