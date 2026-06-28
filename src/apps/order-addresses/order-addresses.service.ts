@@ -45,4 +45,33 @@ export class OrderAddressesService extends PrismaBaseService<'orderAddress'> {
     });
     return data;
   }
+
+  // Lấy danh sách địa chỉ giao hàng gần đây của user — dùng để gợi ý khi đặt hàng mới
+  async getRecentAddresses(userID: string) {
+    const addresses = await this.extended.findMany({
+      where: {
+        type: 'shipping', // chỉ lấy địa chỉ giao hàng, không lấy billing
+        order: { userID }, // chỉ lấy của user hiện tại
+      },
+      select: {
+        firstName: true,
+        lastName: true,
+        company: true,
+        fullAddress: true,
+        city: true,
+        province: true,
+        country: true,
+        phone: true,
+      },
+      take: 5, // tối đa 5 địa chỉ gần nhất (đã được sort desc bởi $extends hook mặc định)
+    });
+    // Loại bỏ địa chỉ trùng lặp theo fullAddress + phone
+    const seen = new Set<string>();
+    return addresses.filter(({ fullAddress, phone }) => {
+      const key = `${fullAddress}_${phone}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
 }
