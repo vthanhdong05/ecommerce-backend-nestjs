@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { OrderStatus, Prisma, VendorStatus } from '@prisma/client';
 import { UserInfo } from 'src/common/decorators/user.decorator';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -14,6 +13,7 @@ import { CreateVendorDto, ImportVendorsDto } from './dto/create-vendor.dto';
 import { ExportVendorsDto, GetVendorsPaginationDto } from './dto/get-vendor.dto';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
 import { Vendor } from './entities/vendor.entity';
+import { OnEvent } from '@nestjs/event-emitter';
 
 @Injectable()
 export class VendorsService extends PrismaBaseService<'vendor'> implements Options<Vendor> {
@@ -27,7 +27,6 @@ export class VendorsService extends PrismaBaseService<'vendor'> implements Optio
     private paginationUtilService: PaginationUtilService,
     private userService: UsersService,
     private queryUtil: QueryUtilService,
-    private eventEmitter: EventEmitter2,
   ) {
     super(prismaService, 'vendor');
   }
@@ -166,21 +165,25 @@ export class VendorsService extends PrismaBaseService<'vendor'> implements Optio
   }
 
   // import danh sách vendor từ file Excel vào database
-  async importVendors({ file, user }: ImportVendorsDto) {
+  async importVendors({ file }: ImportVendorsDto) {
     const vendorSheetName = this.excelSheets[this.vendorEntityName];
     const dataCreated = await this.excelUtilService.read(file);
     const allUsers = await this.userService.client.findMany({
       select: { id: true, email: true },
     });
     const emailToId = new Map<string, string>(allUsers.map((u) => [u.email, u.id]));
+    // validate trước, không throw trong .map()
+    const rows = dataCreated[vendorSheetName];
+    for (const item of rows) {
+      if (!emailToId.has(item.userEmail)) {
+        throw new BadRequestException(`User not found with email: "${item.userEmail}"`);
+      }
+    }
     const data = await this.extended.createMany({
-      data: dataCreated[vendorSheetName].map((item) => {
+      data: rows.map((item) => {
         const { userEmail, ...itemRemain } = item;
-        const userID = emailToId.get(userEmail);
-        if (!userID) {
-          throw new BadRequestException(`User not found with email: "${userEmail}"`);
-        }
-        return { ...itemRemain, userID, user };
+        return { ...itemRemain, userID: emailToId.get(userEmail)! };
+        // bỏ `user` — không phải Prisma field
       }),
     });
     return data;

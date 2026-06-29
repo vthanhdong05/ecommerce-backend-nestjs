@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { PrismaBaseService } from '../../common/services/prisma-base.service';
@@ -17,10 +18,11 @@ export class OrderAddressesService extends PrismaBaseService<'orderAddress'> {
     return super.extended;
   }
 
-  async getOrderAddress(where: Prisma.OrderAddressWhereUniqueInput) {
-    const data = await this.extended.findUnique({
-      where,
+  async getOrderAddress({ id, userID }: { id: string; userID: string }) {
+    const data = await this.extended.findFirst({
+      where: { id, order: { userID } },
     });
+    if (!data) throw new NotFoundException('Order address not found');
     return data;
   }
 
@@ -37,8 +39,13 @@ export class OrderAddressesService extends PrismaBaseService<'orderAddress'> {
   async updateOrderAddress(params: {
     where: Prisma.OrderAddressWhereUniqueInput;
     data: UpdateOrderAddressDto;
+    userID: string;
   }) {
-    const { where, data: dataUpdate } = params;
+    const { where, data: dataUpdate, userID } = params;
+    const existing = await this.extended.findFirst({
+      where: { id: where.id, order: { userID } },
+    });
+    if (!existing) throw new NotFoundException('Order address not found');
     const data = await this.extended.update({
       data: dataUpdate,
       where,

@@ -1,8 +1,8 @@
 import {
-  Body,
   Controller,
   Get,
   Post,
+  Query,
   Req,
   Res,
   UploadedFile,
@@ -25,7 +25,7 @@ export class UserVendorRolesController {
 
   @Get('export')
   @UseInterceptors(ExcelResponseInterceptor)
-  async exportUserVendorRoles(@Body() params: ExportUserVendorRolesDto, @Res() res: Response) {
+  async exportUserVendorRoles(@Query() params: ExportUserVendorRolesDto, @Res() res: Response) {
     const workbook = await this.userVendorRolesService.exportUserVendorRoles(params);
     await workbook.xlsx.write(res);
     res.end();

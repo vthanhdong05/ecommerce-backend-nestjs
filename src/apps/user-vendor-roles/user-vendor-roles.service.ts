@@ -38,20 +38,13 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
     return super.extended;
   }
 
-  // Export dữ liệu User–Vendor–Role ra file Excel
   async exportUserVendorRoles(params: ExportUserVendorRolesDto) {
     const { userIDs, roleIDs, vendorIDs } = params ?? {};
     const where: Prisma.UserVendorRoleWhereInput = {};
 
-    if (userIDs) {
-      where.userID = { in: userIDs };
-    }
-    if (vendorIDs) {
-      where.vendorID = { in: vendorIDs };
-    }
-    if (roleIDs) {
-      where.roleID = { in: roleIDs };
-    }
+    if (userIDs) where.userID = { in: userIDs };
+    if (vendorIDs) where.vendorID = { in: vendorIDs };
+    if (roleIDs) where.roleID = { in: roleIDs };
 
     const userVendorRoles = await this.extended.export({
       select: {
@@ -71,7 +64,7 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
           }))
         : [{ userEmail: '', vendorName: '', roleName: '' }];
 
-    const data = this.excelUtilService.generateExcel({
+    return this.excelUtilService.generateExcel({
       worksheets: [
         {
           sheetName: this.excelSheets[this.userVendorRoleEntityName],
@@ -80,14 +73,10 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
         },
       ],
     });
-
-    return data;
   }
 
-  // Import dữ liệu từ file Excel vào database
   async importUserVendorRoles({ file, user }: ImportUserVendorRolesDto) {
     const userVendorRoleSheetName = this.excelSheets[this.userVendorRoleEntityName];
-
     const dataCreated = await this.excelUtilService.read(file);
     const dataImport = dataCreated[userVendorRoleSheetName];
 
@@ -97,97 +86,64 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
       this.rolesService.client.findMany({ select: { id: true, name: true } }),
     ]);
 
-    const userMap = new Map(allUsers.map((u) => [u.email, u.id])); // email   → userID
-    const vendorMap = new Map(allVendors.map((v) => [v.name, v.id])); // name    → vendorID
-    const roleMap = new Map(allRoles.map((r) => [r.name, r.id])); // roleName → roleID
+    const userMap = new Map(allUsers.map((u) => [u.email, u.id]));
+    const vendorMap = new Map(allVendors.map((v) => [v.name, v.id]));
+    const roleMap = new Map(allRoles.map((r) => [r.name, r.id]));
 
-    const idsMapping = dataImport.map((item) => {
-      const { userEmail, vendorName, roleName } = item ?? {};
-
-      const userID = userMap.get(userEmail);
-      if (!userID) {
+    for (const { userEmail, vendorName, roleName } of dataImport) {
+      if (!userMap.has(userEmail))
         throw new BadRequestException(`User không tồn tại: "${userEmail}"`);
-      }
-
-      const vendorID = vendorMap.get(vendorName);
-      if (!vendorID) {
+      if (!vendorMap.has(vendorName))
         throw new BadRequestException(`Vendor không tồn tại: "${vendorName}"`);
-      }
-
-      const roleID = roleMap.get(roleName);
-      if (!roleID) {
+      if (!roleMap.has(roleName))
         throw new BadRequestException(`Role không tồn tại: "${roleName}"`);
-      }
+    }
 
-      return { userID, vendorID, roleID };
-    });
+    const idsMapping = dataImport.map(({ userEmail, vendorName, roleName }) => ({
+      userID: userMap.get(userEmail)!,
+      vendorID: vendorMap.get(vendorName)!,
+      roleID: roleMap.get(roleName)!,
+    }));
 
     return this.prismaService.$transaction(async (tx) => {
       await tx.userVendorRole.deleteMany({ where: { OR: idsMapping } });
-
       return tx.userVendorRole.createMany({
-        data: idsMapping.map((item) => ({
-          ...item,
-          createdBy: user.userID,
-        })),
+        data: idsMapping.map((item) => ({ ...item, createdBy: user.userID })),
       });
     });
   }
 
-  // Lấy danh sách mapping từ database
   async getUserVendorRoles() {
     const data = await this.extended.findMany({
       select: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-          },
-        },
-        vendor: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-          },
-        },
-        role: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-          },
-        },
+        user: { select: { id: true, email: true } },
+        vendor: { select: { id: true, name: true, description: true } },
+        role: { select: { id: true, name: true, description: true } },
       },
     });
-    // Map để gom nhóm theo vendor
+
     const vendorMap = new Map<string, { vendor: any; members: any[] }>();
     for (const { vendor, user, role } of data) {
       if (!vendorMap.has(vendor.id)) {
-        vendorMap.set(vendor.id, { vendor, members: [] }); // check vendor nếu chưa có -> tạo mới
+        vendorMap.set(vendor.id, { vendor, members: [] });
       }
-      vendorMap.get(vendor.id)!.members.push({ user, role }); // Thêm user+role vào vendor
+      vendorMap.get(vendor.id)!.members.push({ user, role });
     }
     return [...vendorMap.values()];
   }
 
-  // Lấy danh sách members của vendor
   async getMembers(vendorID: Vendor['id']) {
-    const data = await this.extended.findMany({
+    return this.extended.findMany({
       where: { vendorID },
       select: {
         id: true,
         status: true,
-        user: {
-          select: { id: true, email: true, firstName: true, lastName: true },
-        },
+        user: { select: { id: true, email: true, firstName: true, lastName: true } },
         role: { select: { id: true, name: true } },
       },
     });
-    return data;
   }
 
-  // Thêm thành viên vào vendor
   async addMember({
     vendorID,
     userID,
@@ -199,16 +155,14 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
     roleID: Role['id'];
     user: UserInfo;
   }) {
-    // Check user tồn tại
-    const existUser = await this.usersService.client.findUnique({
-      where: { id: userID },
-    });
+    const existUser = await this.usersService.client.findUnique({ where: { id: userID } });
     if (!existUser) throw new BadRequestException(`User not found`);
-    // Check role phải là VENDOR type
+
     const role = await this.rolesService.client.findFirst({
       where: { id: roleID, roleType: RoleType.VENDOR },
     });
     if (!role) throw new BadRequestException(`Invalid role or not a VENDOR role`);
+
     return this.extended.create({
       data: { userID, vendorID, roleID, createdBy: user.userEmail },
     });
@@ -226,7 +180,6 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
     status?: UserVendorRoleStatus;
     user: UserInfo;
   }) {
-    // Verify record thuộc đúng vendor trong URL
     const member = await this.extended.findFirst({ where: { id, vendorID } });
     if (!member) throw new NotFoundException('Member not found');
 
@@ -236,6 +189,7 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
       });
       if (!role) throw new BadRequestException('Invalid role or not a VENDOR role');
     }
+
     return this.extended.update({
       where: { id },
       data: {
@@ -246,21 +200,19 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
   }
 
   async removeMember(id: string, vendorID: string, requestingUserID: string) {
-    // Verify record thuộc đúng vendor trong URL
     const member = await this.extended.findFirst({
       where: { id, vendorID },
       include: { vendor: true },
     });
     if (!member) throw new NotFoundException('Member not found');
-    // Ngăn owner tự xóa chính mình — owner là Vendor.userID
+
     if (member.vendor.userID === requestingUserID && member.userID === requestingUserID) {
       throw new BadRequestException('Owner cannot remove themselves from the vendor');
     }
 
-    return this.prismaService.userVendorRole.delete({ where: { id } });
+    return this.extended.delete({ where: { id } });
   }
 
-  // export members
   async exportMembers(vendorID: string) {
     const userVendorRoles = await this.extended.export({
       where: { vendorID },
@@ -269,10 +221,12 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
         role: { select: { name: true } },
       },
     });
+
     const mappedData = userVendorRoles.map(({ user, role }) => ({
       userEmail: user.email,
       roleName: role.name,
     }));
+
     return this.excelUtilService.generateExcel({
       worksheets: [
         {
@@ -283,7 +237,6 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
     });
   }
 
-  // import members
   async importMembers({
     vendorID,
     file,
@@ -296,6 +249,7 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
     const sheetName = this.excelSheets[this.userVendorRoleEntityName];
     const dataCreated = await this.excelUtilService.read(file);
     const rows = dataCreated[sheetName];
+
     const [allUsers, allRoles] = await Promise.all([
       this.usersService.client.findMany({ select: { id: true, email: true } }),
       this.rolesService.client.findMany({
@@ -303,20 +257,25 @@ export class UserVendorRolesService extends PrismaBaseService<'userVendorRole'> 
         select: { id: true, name: true },
       }),
     ]);
+
     const userMap = new Map(allUsers.map((u) => [u.email, u.id]));
     const roleMap = new Map(allRoles.map((r) => [r.name, r.id]));
-    const data = rows.map(({ userEmail, roleName }) => {
-      const userID = userMap.get(userEmail);
-      if (!userID) throw new BadRequestException(`User not found: "${userEmail}"`);
 
-      const roleID = roleMap.get(roleName);
-      if (!roleID)
+    for (const { userEmail, roleName } of rows) {
+      if (!userMap.has(userEmail)) throw new BadRequestException(`User not found: "${userEmail}"`);
+      if (!roleMap.has(roleName))
         throw new BadRequestException(
-          `The role does not exist or is not a VENDOR role.: "${roleName}"`,
+          `The role does not exist or is not a VENDOR role: "${roleName}"`,
         );
+    }
 
-      return { userID, vendorID, roleID, createdBy: user.userID };
-    });
+    const data = rows.map(({ userEmail, roleName }) => ({
+      userID: userMap.get(userEmail)!,
+      vendorID,
+      roleID: roleMap.get(roleName)!,
+      createdBy: user.userID,
+    }));
+
     return this.prismaService.$transaction(async (tx) => {
       await tx.userVendorRole.deleteMany({
         where: { vendorID, userID: { in: data.map((d) => d.userID) } },

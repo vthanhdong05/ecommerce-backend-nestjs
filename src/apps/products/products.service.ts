@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, ProductStatus, ProductVariant } from '@prisma/client';
 import { UserInfo } from 'src/common/decorators/user.decorator';
@@ -16,6 +16,7 @@ import { ExportProductsDto, GetProductsPaginationDto } from './dto/get-product.d
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Product } from './entities/product.entity';
 
+@Injectable()
 export class ProductsService extends PrismaBaseService<'product'> implements Options<Product> {
   private productEntityName = Product.name;
   private excelSheets = {
@@ -44,12 +45,12 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
   async getProduct(where: Prisma.ProductWhereUniqueInput & { vendorID?: Vendor['id'] }) {
     const { vendorID, ...uniqueWhere } = where;
     const data = await this.extended.findFirst({
-      where: {
-        ...uniqueWhere,
-        ...(vendorID && { vendorID }),
-      },
+      where: { ...uniqueWhere, ...(vendorID && { vendorID }) },
+      include: { productCategories: { select: { categoryID: true } } },
     });
-    return data;
+    if (!data) return null;
+    const { productCategories, ...rest } = data as any;
+    return { ...rest, categoryIDs: productCategories.map((pc: any) => pc.categoryID) };
   }
 
   async getProducts({
@@ -58,19 +59,19 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
     vendorID,
   }: GetProductsPaginationDto & { vendorID?: Vendor['id'] }) {
     const where = { ...(vendorID && { vendorID }) };
-
     const totalItems = await this.extended.count({ where });
-    const paging = this.paginationUtilService.paging({
-      page,
-      itemPerPage,
-      totalItems,
-    });
+    const paging = this.paginationUtilService.paging({ page, itemPerPage, totalItems });
     const list = await this.extended.findMany({
       where,
       skip: paging.skip,
       take: itemPerPage,
+      include: { productCategories: { select: { categoryID: true } } },
     });
-    return paging.format(list);
+    const mapped = (list as any[]).map(({ productCategories, ...rest }) => ({
+      ...rest,
+      categoryIDs: productCategories.map((pc: any) => pc.categoryID),
+    }));
+    return paging.format(mapped);
   }
 
   async createProduct(createProductDto: CreateProductDto, user: UserInfo) {
@@ -155,32 +156,27 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
       this.extended.export({
         where: {
           ...(ids && { id: { in: ids } }),
-          ...(vendorID && { vendorID }), // ← filter theo vendor
+          ...(vendorID && { vendorID }),
         },
+        include: { productCategories: { select: { category: { select: { name: true } } } } },
       }),
-      this.vendorService.client.findMany({
-        select: { id: true, name: true },
-      }),
+      this.vendorService.client.findMany({ select: { id: true, name: true } }),
     ]);
-    const idToName = new Map<string, string>(allVendors.map((vendor) => [vendor.id, vendor.name]));
-    const mappedProducts = products.map((product) => {
+    const idToVendorName = new Map(allVendors.map((v) => [v.id, v.name]));
+    const mappedProducts = (products as any[]).map(({ productCategories, ...product }) => {
       const mapped: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(product)) {
         if (key === 'vendorID') {
-          mapped['vendorName'] = value ? (idToName.get(value as string) ?? null) : null;
+          mapped['vendorName'] = value ? (idToVendorName.get(value as string) ?? null) : null;
         } else {
           mapped[key] = value;
         }
       }
+      mapped['categoryNames'] = productCategories.map((pc: any) => pc.category.name).join(', ');
       return mapped;
     });
     return this.excelUtilService.generateExcel({
-      worksheets: [
-        {
-          sheetName: this.excelSheets[this.productEntityName],
-          data: mappedProducts,
-        },
-      ],
+      worksheets: [{ sheetName: this.excelSheets[this.productEntityName], data: mappedProducts }],
     });
   }
 
@@ -190,10 +186,35 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
     const productSheetName = this.excelSheets[this.productEntityName];
     const dataCreated = await this.excelUtilService.read(file);
     const rows = dataCreated[productSheetName];
+    const allCategoryNames = [
+      ...new Set(
+        rows.flatMap((r: any) =>
+          (r.categoryNames as string)
+            .split(',')
+            .map((n: string) => n.trim())
+            .filter(Boolean),
+        ),
+      ),
+    ] as string[];
+    const categories = await this.prismaService.category.findMany({
+      where: { name: { in: allCategoryNames } },
+      select: { id: true, name: true },
+    });
+    const categoryMap = new Map(categories.map((c) => [c.name, c.id]));
+    for (const name of allCategoryNames) {
+      if (!categoryMap.has(name)) throw new BadRequestException(`Category not found: "${name}"`);
+    }
+    const resolveCategories = (categoryNames: string) =>
+      categoryNames
+        .split(',')
+        .map((n) => n.trim())
+        .filter(Boolean)
+        .map((n) => categoryMap.get(n)!);
+
     if (vendorID) {
       return this.prismaService.$transaction(async (tx) => {
         const createdProducts = await tx.product.createManyAndReturn({
-          data: rows.map(({ vendorName: _vendorName, ...rest }) => ({
+          data: rows.map(({ vendorName: _v, categoryNames: _cn, ...rest }: any) => ({
             ...rest,
             slug: this.stringUtilService.toSlug(rest.name),
             vendorID,
@@ -201,53 +222,67 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
           })),
         });
         await tx.productVariant.createMany({
-          data: createdProducts.map((product) => ({
-            productID: product.id,
+          data: createdProducts.map((p) => ({
+            productID: p.id,
             name: null,
-            price: product.price,
-            stockQuantity: product.stockQuantity,
+            price: p.price,
+            stockQuantity: p.stockQuantity,
             isDefault: true,
             createdBy: user.userEmail,
           })),
+        });
+        await tx.productCategory.createMany({
+          data: createdProducts.flatMap((p, i) =>
+            resolveCategories(rows[i].categoryNames).map((categoryID: string) => ({
+              productID: p.id,
+              categoryID,
+            })),
+          ),
         });
         this.eventEmitter.emit('product.imported', { vendorID, count: createdProducts.length });
         return { count: createdProducts.length };
       });
     }
-    // (Admin — import kèm vendorName)
-    const vendorNames = [...new Set(rows.map((r) => r.vendorName))] as string[];
+    const vendorNames = [...new Set(rows.map((r: any) => r.vendorName))] as string[];
     const vendors = await this.vendorService.client.findMany({
       where: { name: { in: vendorNames } },
       select: { id: true, name: true },
     });
     const vendorMap = new Map(vendors.map((v) => [v.name, v.id]));
-    const mappedRows = rows.map(({ vendorName, ...rest }) => {
-      const resolvedVendorID = vendorMap.get(vendorName);
-      if (!resolvedVendorID) throw new BadRequestException(`Vendor "${vendorName}" does not exist`);
-      return { ...rest, vendorID: resolvedVendorID };
-    });
+    for (const name of vendorNames) {
+      if (!vendorMap.has(name)) throw new BadRequestException(`Vendor "${name}" does not exist`);
+    }
     const data = await this.prismaService.$transaction(async (tx) => {
       const createdProducts = await tx.product.createManyAndReturn({
-        data: mappedRows.map((row) => ({
-          ...row,
-          slug: this.stringUtilService.toSlug(row.name),
+        data: rows.map(({ vendorName, categoryNames: _cn, ...rest }: any) => ({
+          ...rest,
+          vendorID: vendorMap.get(vendorName)!,
+          slug: this.stringUtilService.toSlug(rest.name),
           createdBy: user.userEmail,
         })),
       });
       await tx.productVariant.createMany({
-        data: createdProducts.map((product) => ({
-          productID: product.id,
+        data: createdProducts.map((p) => ({
+          productID: p.id,
           name: null,
-          price: product.price,
-          stockQuantity: product.stockQuantity,
+          price: p.price,
+          stockQuantity: p.stockQuantity,
           isDefault: true,
           createdBy: user.userEmail,
         })),
       });
+      await tx.productCategory.createMany({
+        data: createdProducts.flatMap((p, i) =>
+          resolveCategories(rows[i].categoryNames).map((categoryID: string) => ({
+            productID: p.id,
+            categoryID,
+          })),
+        ),
+      });
       return createdProducts;
     });
-    const vendorCounts = data.reduce<Record<string, number>>((acc, product) => {
-      acc[product.vendorID] = (acc[product.vendorID] ?? 0) + 1;
+    const vendorCounts = data.reduce<Record<string, number>>((acc, p) => {
+      acc[p.vendorID] = (acc[p.vendorID] ?? 0) + 1;
       return acc;
     }, {});
     for (const [vID, count] of Object.entries(vendorCounts)) {

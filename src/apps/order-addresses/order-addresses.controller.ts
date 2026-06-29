@@ -16,19 +16,23 @@ export class OrderAddressesController {
     return this.orderAddressesService.getRecentAddresses(user.userID);
   }
 
+  @Get(':id')
+  @SkipPermission()
+  getOrderAddress(@Param('id') id: OrderAddress['id'], @User() user: UserInfo) {
+    return this.orderAddressesService.getOrderAddress({ id, userID: user.userID });
+  }
+
   @Patch(':id')
+  @SkipPermission()
   updateOrderAddress(
     @Param('id') id: OrderAddress['id'],
     @Body() updateOrderAddressDto: UpdateOrderAddressDto,
+    @User() user: UserInfo,
   ) {
     return this.orderAddressesService.updateOrderAddress({
       data: updateOrderAddressDto,
       where: { id },
+      userID: user.userID,
     });
-  }
-
-  @Get(':id')
-  getOrderAddress(@Param('id') id: OrderAddress['id']) {
-    return this.orderAddressesService.getOrderAddress({ id });
   }
 }

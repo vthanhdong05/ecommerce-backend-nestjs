@@ -3,7 +3,6 @@ import type { Response } from 'express';
 import { ExcelResponseInterceptor } from '../../common/interceptors/excel-response/excel-response.interceptor';
 import { ExportOrderPromotionsDto } from './dto/get-order-promotion.dto';
 import { OrderPromotionsService } from './order-promotions.service';
-
 @Controller('order-promotions')
 export class OrderPromotionsController {
   constructor(private readonly orderPromotionsService: OrderPromotionsService) {}

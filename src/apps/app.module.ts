@@ -47,6 +47,7 @@ import { RolesModule } from './roles/roles.module';
 import { UserSystemRolesModule } from './user-system-role/user-system-roles.module';
 import { UsersModule } from './users/users.module';
 import { VendorsModule } from './vendors/vendors.module';
+import { UserVendorRolesModule } from './user-vendor-roles/user-vendor-roles.module';
 
 @Module({
   imports: [
@@ -77,6 +78,7 @@ import { VendorsModule } from './vendors/vendors.module';
     PermissionsModule,
     RolePermissionsModule,
     UserSystemRolesModule,
+    UserVendorRolesModule,
     VendorsModule,
     ProductImagesModule,
     CategoriesModule,
