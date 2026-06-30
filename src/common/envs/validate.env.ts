@@ -25,6 +25,7 @@ const baseEnvSchema = z.object({
   THROTTLE_LIMIT: z.coerce.number().default(100),
 
   JWT_SECRET: z.string().optional(),
+  RESET_TOKEN_SECRET: z.string().optional(),
 
   MULTER_DESTINATION_FILE: z.string().default('./uploads'),
 
@@ -41,24 +42,30 @@ const baseEnvSchema = z.object({
 
   DATABASE_URL: z.string().url(),
 
-  REDIS_HOST: z.string().default('localhost'),
-  REDIS_PORT: z.coerce.number().default(6379),
+  REDIS_HOST: zodWarnOptional(z.string(), 'REDIS_HOST'),
+  REDIS_PORT: zodWarnOptional(z.coerce.number(), 'REDIS_PORT'),
   REDIS_TTL: z.coerce.number().default(60000),
 });
 
 const envSchema = baseEnvSchema.transform((data) => {
-  const expectedUrl = `http://${data.HOST}:${data.PORT}${data.APP_PREFIX}`;
-
   if (!data.APP_URL) {
-    data = { ...data, APP_URL: expectedUrl };
-  }
-
-  if (data.APP_URL !== expectedUrl) {
-    throw new Error(`APP_URL must be "${expectedUrl}"`);
+    data = { ...data, APP_URL: `http://${data.HOST}:${data.PORT}${data.APP_PREFIX}` };
   }
 
   if (!data.JWT_SECRET) {
     data = { ...data, JWT_SECRET: `JWT_SECRET_${data.APP_NAME}` };
+  }
+
+  if (!data.RESET_TOKEN_SECRET) {
+    data = { ...data, RESET_TOKEN_SECRET: `RESET_TOKEN_SECRET_${data.APP_NAME}` };
+  }
+
+  if (!data.REDIS_HOST) {
+    data = { ...data, REDIS_HOST: 'localhost' };
+  }
+
+  if (!data.REDIS_PORT) {
+    data = { ...data, REDIS_PORT: 6379 };
   }
 
   return data;
