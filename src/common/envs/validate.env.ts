@@ -45,6 +45,7 @@ const baseEnvSchema = z.object({
   REDIS_HOST: zodWarnOptional(z.string(), 'REDIS_HOST'),
   REDIS_PORT: zodWarnOptional(z.coerce.number(), 'REDIS_PORT'),
   REDIS_TTL: z.coerce.number().default(60000),
+  REDIS_URL: zodWarnOptional(z.string().url(), 'REDIS_URL'),
 });
 
 const envSchema = baseEnvSchema.transform((data) => {
