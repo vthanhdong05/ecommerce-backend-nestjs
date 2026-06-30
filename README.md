@@ -1,103 +1,116 @@
-<<<<<<< HEAD
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Multi-Vendor E-Commerce Backend (NestJS)
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A production-oriented REST API for a multi-vendor e-commerce marketplace, built with NestJS, Prisma, and PostgreSQL. Supports independent vendor shops, role-based access control scoped per vendor, product variants, promotions, and order management — the core domain logic behind platforms like Shopee or Etsy.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+**Live API:** _coming soon_
+**API Docs (Swagger):** `/api-docs` _(once deployed)_
 
-## Description
+## Why this project
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Most CRUD tutorials stop at "create a product." This project goes further into the parts that are actually hard in a real marketplace backend:
 
-## Project setup
+- **Two-tier authorization** — a global admin can manage everything, while a vendor can only act within their own shop. The same service layer powers both `/products` (admin) and `/vendors/:vendorId/products` (vendor-scoped) controllers, with ownership checks enforced at the database query level, not just at the route.
+- **Permission system, not just roles** — permissions are computed per route + HTTP method (`[/products]_[CREATE]`), checked against role-permission mappings stored in the database, so access control changes don't require a redeploy.
+- **Soft delete and audit fields applied globally** — handled once via a Prisma Client Extension, not repeated in every service (`deletedAt`, `createdBy`, slug generation are automatic for every model).
+- **Price/stock integrity between Product and its default variant** — every product implicitly owns a hidden default `ProductVariant`, kept in sync on update so order pricing always reads from the variant layer, never directly from the product.
 
-```bash
-$ npm install
+## Tech Stack
+
+| Layer               | Choice                                                          |
+| ------------------- | --------------------------------------------------------------- |
+| Framework           | NestJS 11                                                       |
+| Database            | PostgreSQL (Prisma ORM)                                         |
+| Validation          | Zod (via `nestjs-zod`), generated directly into Swagger/OpenAPI |
+| Auth                | JWT (access + refresh), cookie or Bearer header                 |
+| Cache               | Redis (`@keyv/redis`), with graceful degradation if unavailable |
+| File storage        | Cloudinary                                                      |
+| Email               | Nodemailer + Pug templates                                      |
+| Realtime            | Socket.IO (order/vendor events)                                 |
+| Excel import/export | ExcelJS, with per-vendor scoping on import                      |
+| Containerization    | Docker (multi-stage build)                                      |
+| Testing             | Jest (unit + e2e)                                               |
+
+## Architecture highlights
+
+**Domain-driven module structure.** Each business entity (`products`, `orders`, `vendors`, `promotions`...) is a self-contained NestJS module with its own controller, service, DTO (Zod schema), and Prisma-backed entity — 20+ modules following the same convention, making the codebase predictable to navigate.
+
+**Database layer extends Prisma, doesn't wrap it.** Instead of a generic repository pattern, `PrismaService` uses Prisma Client Extensions (`$extends`) to inject cross-cutting behavior into every query:
+
+```ts
+findMany: ({ args, query, model }) => {
+  if (!JUNCTION_TABLES.includes(model)) {
+    args.where = { ...args.where, deletedAt: null };
+  }
+  return query(args);
+};
 ```
 
-## Compile and run the project
+This means soft delete, slug generation, and `createdBy` tracking are correct by construction — a developer adding a new model gets these for free, with no risk of forgetting a `where: { deletedAt: null }` somewhere.
+
+**Database connection split for pooled vs. direct access.** The app connects through Supabase's connection pooler (`pgbouncer`) for normal queries, but uses a direct connection (`directUrl`) for Prisma migrations — a detail that's easy to miss and causes silent migration failures in serverless/pooled Postgres setups if skipped.
+
+## Local Development
+
+### Prerequisites
+
+- Node.js 20+
+- Docker & Docker Compose
+
+### Setup
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+git clone https://github.com/vthanhdong05/ecommerce-backend-nestjs.git
+cd ecommerce-backend-nestjs
+cp .env.example .env   # fill in your local values
+npm install
 ```
 
-## Run tests
+### Run with Docker (Postgres + Redis, app on host)
 
 ```bash
-# unit tests
-$ npm run test
+docker-compose up -d postgres redis
+npx prisma generate
+npx prisma migrate dev
+npm run start:dev
+```
 
-# e2e tests
-$ npm run test:e2e
+API available at `http://localhost:8888/api`
+Swagger UI at `http://localhost:8888/api-docs`
 
-# test coverage
-$ npm run test:cov
+### Run fully containerized
+
+```bash
+docker-compose up -d
+```
+
+## Environment Variables
+
+See [`.env.example`](./.env.example) for the full list. Key variables:
+
+| Variable                           | Purpose                                    |
+| ---------------------------------- | ------------------------------------------ |
+| `DATABASE_URL`                     | Pooled connection string (runtime queries) |
+| `DIRECT_URL`                       | Direct connection string (migrations only) |
+| `JWT_SECRET`, `RESET_TOKEN_SECRET` | Auth token signing                         |
+| `REDIS_HOST`, `REDIS_PORT`         | Optional — falls back gracefully if unset  |
+| `CLOUDINARY_*`                     | Image upload provider                      |
+
+## Database Schema
+
+The data model covers: users, vendors, role-based permissions (system + per-vendor), products with variants and images, categories, multi-vendor orders, promotions, and carts. Full schema in [`prisma/schema.prisma`](./prisma/schema.prisma).
+
+## Testing
+
+```bash
+npm run test        # unit tests
+npm run test:e2e    # end-to-end tests
+npm run test:cov    # coverage report
 ```
 
 ## Deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Containerized via a multi-stage Dockerfile (builder stage compiles + generates Prisma Client, production stage runs `prisma migrate deploy` on boot, then starts the compiled app). Deployed on Render, connected to a managed PostgreSQL instance on Supabase.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## Author
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
-=======
-# ecommerce-backend-nestjs
-Scalable ecommerce backend API built with NestJS, featuring authentication, product and order management
->>>>>>> 22ac78b54b0d3b21273502dfec9af207217f3bec
+**[Your name]** — [LinkedIn] · [GitHub] · [Portfolio]
