@@ -24,7 +24,6 @@ import { PaginationUtilModule } from 'src/common/utils/pagination-util/paginatio
 import { QueryUtilModule } from 'src/common/utils/query-util/query-util.module';
 import { StringUtilModule } from 'src/common/utils/string-util/string-util.module';
 import { EventsModule } from 'src/events/events.module';
-import { AutoMockingModule } from 'src/testing/auto-mocking/auto-mocking.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthGuard } from './auth/auth.guard';
@@ -45,9 +44,9 @@ import { PromotionsModule } from './promotions/promotions.module';
 import { RolePermissionsModule } from './role-permissions/role-permissions.module';
 import { RolesModule } from './roles/roles.module';
 import { UserSystemRolesModule } from './user-system-role/user-system-roles.module';
+import { UserVendorRolesModule } from './user-vendor-roles/user-vendor-roles.module';
 import { UsersModule } from './users/users.module';
 import { VendorsModule } from './vendors/vendors.module';
-import { UserVendorRolesModule } from './user-vendor-roles/user-vendor-roles.module';
 
 @Module({
   imports: [
@@ -69,7 +68,6 @@ import { UserVendorRolesModule } from './user-vendor-roles/user-vendor-roles.mod
     FileUtilModule,
     EventsModule,
     EventEmitterModule.forRoot(),
-    AutoMockingModule,
     MailUtilModule,
     RateLimitModule,
     UsersModule,
