@@ -35,6 +35,18 @@ const mockProduct = {
   updatedAt: new Date(),
   deletedAt: null,
   createdBy: null,
+  productCategories: [],
+};
+
+const mockProductWithCategories = {
+  ...mockProduct,
+  productCategories: [
+    {
+      category: {
+        name: 'Electronics',
+      },
+    },
+  ],
 };
 
 describe('ProductsService', () => {
@@ -76,6 +88,40 @@ describe('ProductsService', () => {
       .spyOn(excelUtilService, 'generateExcel')
       .mockReturnValue('workbook' as any);
     readSpy = jest.spyOn(excelUtilService, 'read');
+
+    jest
+      .spyOn(service.prismaService.category, 'findMany')
+      .mockResolvedValue([{ id: 'cat-id-1', name: 'Electronics' }]);
+
+    jest.spyOn(service.prismaService, '$transaction').mockImplementation((cb: any) =>
+      cb({
+        product: {
+          create: jest.fn().mockImplementation((args) => mockExtended.create(args)),
+          update: jest.fn().mockImplementation((args) => mockExtended.update(args)),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+          createManyAndReturn: jest.fn().mockImplementation((args) => {
+            const dataList = Array.isArray(args.data) ? args.data : [args.data];
+            return Promise.resolve(
+              dataList.map((item: any, index: number) => ({
+                id: `product-id-${index + 1}`,
+                ...item,
+              })),
+            );
+          }),
+        },
+        productVariant: {
+          create: jest.fn().mockResolvedValue({ id: 'variant-id-1' }),
+          createMany: jest.fn().mockResolvedValue({ count: 1 }),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+        productCategory: {
+          createMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+        productImage: {
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+      }),
+    );
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -84,14 +130,21 @@ describe('ProductsService', () => {
     it('should return product by id', async () => {
       mockExtended.findFirst.mockResolvedValue(mockProduct);
       const result = await service.getProduct({ id: 'product-id-1' });
-      expect(result).toEqual(mockProduct);
+      const rest = { ...mockProduct } as any;
+      delete rest.productCategories;
+      expect(result).toEqual({ ...rest, categoryIDs: [] });
     });
 
     it('should filter by vendorID if provided', async () => {
       mockExtended.findFirst.mockResolvedValue(mockProduct);
-      await service.getProduct({ id: 'product-id-1', vendorID: 'vendor-id-1' });
+      const result = await service.getProduct({ id: 'product-id-1', vendorID: 'vendor-id-1' });
+      const rest = { ...mockProduct } as any;
+      delete rest.productCategories;
+      expect(result).toEqual({ ...rest, categoryIDs: [] });
       expect(mockExtended.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({ where: expect.objectContaining({ vendorID: 'vendor-id-1' }) }),
+        expect.objectContaining({
+          where: expect.objectContaining({ id: 'product-id-1', vendorID: 'vendor-id-1' }),
+        }),
       );
     });
 
@@ -124,7 +177,7 @@ describe('ProductsService', () => {
   describe('createProduct', () => {
     it('should create product and emit event', async () => {
       mockExtended.create.mockResolvedValue(mockProduct);
-      const dto = { name: 'Nike Air Max', vendorID: 'vendor-id-1', price: 100 };
+      const dto = { name: 'Nike Air Max', vendorID: 'vendor-id-1', price: 100, categoryIDs: [] };
       const result = await service.createProduct(dto, mockUser);
       expect(result).toEqual(mockProduct);
       expect(emitSpy).toHaveBeenCalledWith('product.created', {
@@ -168,9 +221,10 @@ describe('ProductsService', () => {
 
   describe('deleteProduct', () => {
     it('should soft delete product and emit event', async () => {
+      mockExtended.findFirst.mockResolvedValue(mockProduct);
       mockExtended.softDelete.mockResolvedValue(mockProduct);
       const result = await service.deleteProduct({ id: 'product-id-1' });
-      expect(result).toEqual(mockProduct);
+      expect(result).toEqual({ count: 1 });
       expect(emitSpy).toHaveBeenCalledWith('product.deleted', {
         vendorID: mockProduct.vendorID,
       });
@@ -186,7 +240,7 @@ describe('ProductsService', () => {
 
   describe('exportProducts', () => {
     it('should generate excel with product data', async () => {
-      mockExtended.export.mockResolvedValue([mockProduct]);
+      mockExtended.export.mockResolvedValue([mockProductWithCategories]);
       mockVendorsClient.findMany.mockResolvedValue([{ id: 'vendor-id-1', name: 'Nike' }]);
 
       const result = await service.exportProducts({ ids: ['product-id-1'] });
@@ -196,7 +250,7 @@ describe('ProductsService', () => {
     });
 
     it('should filter by vendorID if provided', async () => {
-      mockExtended.export.mockResolvedValue([mockProduct]);
+      mockExtended.export.mockResolvedValue([mockProductWithCategories]);
       mockVendorsClient.findMany.mockResolvedValue([{ id: 'vendor-id-1', name: 'Nike' }]);
 
       await service.exportProducts({ ids: [], vendorID: 'vendor-id-1' });
@@ -210,7 +264,7 @@ describe('ProductsService', () => {
   describe('importProducts', () => {
     it('should import products for vendor directly', async () => {
       readSpy.mockResolvedValue({
-        Product: [{ name: 'Nike Air', price: 100 }],
+        Product: [{ name: 'Nike Air', price: 100, categoryNames: 'Electronics' }],
       });
       mockExtended.createMany.mockResolvedValue({ count: 1 });
 
@@ -225,7 +279,9 @@ describe('ProductsService', () => {
 
     it('should import products for admin with vendorName lookup', async () => {
       readSpy.mockResolvedValue({
-        Product: [{ name: 'Nike Air', price: 100, vendorName: 'Nike' }],
+        Product: [
+          { name: 'Nike Air', price: 100, vendorName: 'Nike', categoryNames: 'Electronics' },
+        ],
       });
       mockVendorsClient.findMany.mockResolvedValue([{ id: 'vendor-id-1', name: 'Nike' }]);
       mockExtended.createMany.mockResolvedValue({ count: 1 });
@@ -240,7 +296,9 @@ describe('ProductsService', () => {
 
     it('should throw if vendor not found in admin import', async () => {
       readSpy.mockResolvedValue({
-        Product: [{ name: 'Nike Air', price: 100, vendorName: 'NotExist' }],
+        Product: [
+          { name: 'Nike Air', price: 100, vendorName: 'NotExist', categoryNames: 'Electronics' },
+        ],
       });
       mockVendorsClient.findMany.mockResolvedValue([]);
 

@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { RoleType, UserVendorRoleStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -9,6 +9,7 @@ import { VendorsService } from '../vendors/vendors.service';
 import { UserVendorRolesService } from './user-vendor-roles.service';
 
 const mockExtended = {
+  findFirst: jest.fn(),
   findMany: jest.fn(),
   export: jest.fn(),
   createMany: jest.fn(),
@@ -164,11 +165,13 @@ describe('UserVendorRolesService', () => {
 
   describe('updateMember', () => {
     it('should update member role', async () => {
+      mockExtended.findFirst.mockResolvedValue({ id: 'uvr-id-1', vendorID: 'vendor-id-1' });
       mockRolesClient.findFirst.mockResolvedValue({ id: 'role-id-2', roleType: RoleType.VENDOR });
       mockExtended.update.mockResolvedValue({ id: 'uvr-id-1', roleID: 'role-id-2' });
 
       const result = await service.updateMember({
         id: 'uvr-id-1',
+        vendorID: 'vendor-id-1',
         roleID: 'role-id-2',
         user: mockUser,
       });
@@ -176,15 +179,35 @@ describe('UserVendorRolesService', () => {
       expect(result).toHaveProperty('roleID', 'role-id-2');
     });
 
+    it('should throw if member not found', async () => {
+      mockExtended.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.updateMember({
+          id: 'uvr-id-1',
+          vendorID: 'vendor-id-1',
+          roleID: 'role-id-2',
+          user: mockUser,
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
     it('should throw if new role is not VENDOR type', async () => {
+      mockExtended.findFirst.mockResolvedValue({ id: 'uvr-id-1', vendorID: 'vendor-id-1' });
       mockRolesClient.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.updateMember({ id: 'uvr-id-1', roleID: 'invalid-role', user: mockUser }),
+        service.updateMember({
+          id: 'uvr-id-1',
+          vendorID: 'vendor-id-1',
+          roleID: 'invalid-role',
+          user: mockUser,
+        }),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('should update status without checking role', async () => {
+      mockExtended.findFirst.mockResolvedValue({ id: 'uvr-id-1', vendorID: 'vendor-id-1' });
       mockExtended.update.mockResolvedValue({
         id: 'uvr-id-1',
         status: UserVendorRoleStatus.inactive,
@@ -192,6 +215,7 @@ describe('UserVendorRolesService', () => {
 
       const result = await service.updateMember({
         id: 'uvr-id-1',
+        vendorID: 'vendor-id-1',
         status: UserVendorRoleStatus.inactive,
         user: mockUser,
       });
@@ -203,10 +227,23 @@ describe('UserVendorRolesService', () => {
 
   describe('removeMember', () => {
     it('should remove a member', async () => {
+      mockExtended.findFirst.mockResolvedValue({
+        id: 'uvr-id-1',
+        vendorID: 'vendor-id-1',
+        userID: 'user-id-2',
+        vendor: { userID: 'user-id-1' },
+      });
       mockExtended.delete.mockResolvedValue({ id: 'uvr-id-1' });
-      const result = await service.removeMember('uvr-id-1');
+      const result = await service.removeMember('uvr-id-1', 'vendor-id-1', 'user-id-1');
       expect(result).toEqual({ id: 'uvr-id-1' });
       expect(mockExtended.delete).toHaveBeenCalledWith({ where: { id: 'uvr-id-1' } });
+    });
+
+    it('should throw NotFoundException if member to remove not found', async () => {
+      mockExtended.findFirst.mockResolvedValue(null);
+      await expect(service.removeMember('not-exist', 'vendor-id-1', 'user-id-1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

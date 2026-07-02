@@ -6,6 +6,7 @@ import { CategoriesService } from './categories.service';
 
 const mockExtended = {
   findUnique: jest.fn(),
+  findFirst: jest.fn(),
   findMany: jest.fn(),
   create: jest.fn(),
   update: jest.fn(),
@@ -116,10 +117,18 @@ describe('CategoriesService', () => {
 
   describe('deleteCategory', () => {
     it('should soft delete category', async () => {
+      mockExtended.findFirst.mockResolvedValue(null);
       mockExtended.softDelete.mockResolvedValue({ count: 1 });
       const result = await service.deleteCategory({ id: 'category-id-1' });
       expect(result).toEqual({ count: 1 });
       expect(mockExtended.softDelete).toHaveBeenCalledWith({ id: 'category-id-1' });
+    });
+
+    it('should throw BadRequestException if category has subcategories', async () => {
+      mockExtended.findFirst.mockResolvedValue({ id: 'child-id-1' });
+      await expect(service.deleteCategory({ id: 'category-id-1' })).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 

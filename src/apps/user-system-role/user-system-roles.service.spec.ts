@@ -16,9 +16,12 @@ const mockExtended = {
 const mockUsersClient = { findMany: jest.fn() };
 const mockRolesClient = { findMany: jest.fn() };
 
+const mockTransaction = jest.fn();
+
 const mockPrismaService = {
   userSystemRole: {},
   extended: { userSystemRole: mockExtended },
+  $transaction: mockTransaction,
 };
 
 const mockExcelUtilService = {
@@ -26,7 +29,10 @@ const mockExcelUtilService = {
   read: jest.fn(),
 };
 
-const mockUsersService = { client: mockUsersClient };
+const mockUsersService = {
+  client: mockUsersClient,
+  invalidatePermissionCache: jest.fn().mockResolvedValue(undefined),
+};
 const mockRolesService = { client: mockRolesClient };
 
 const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com' };
@@ -97,8 +103,17 @@ describe('UserSystemRolesService', () => {
       });
       mockUsersClient.findMany.mockResolvedValue([{ id: 'user-id-1', email: 'test@test.com' }]);
       mockRolesClient.findMany.mockResolvedValue([{ id: 'role-id-1', name: 'Admin' }]);
-      mockExtended.deleteMany.mockResolvedValue({ count: 0 });
-      mockExtended.createMany.mockResolvedValue({ count: 1 });
+
+      const mockDeleteMany = jest.fn().mockResolvedValue({ count: 0 });
+      const mockCreateMany = jest.fn().mockResolvedValue({ count: 1 });
+      mockTransaction.mockImplementation((fn) =>
+        fn({
+          userSystemRole: {
+            deleteMany: mockDeleteMany,
+            createMany: mockCreateMany,
+          },
+        }),
+      );
 
       const result = await service.importUserSystemRoles({
         file: { path: 'test.xlsx', originalname: 'test.xlsx' } as any,
@@ -106,8 +121,8 @@ describe('UserSystemRolesService', () => {
       });
 
       expect(result).toEqual({ count: 1 });
-      expect(mockExtended.deleteMany).toHaveBeenCalled();
-      expect(mockExtended.createMany).toHaveBeenCalled();
+      expect(mockDeleteMany).toHaveBeenCalled();
+      expect(mockCreateMany).toHaveBeenCalled();
     });
 
     it('should throw if user email not found', async () => {

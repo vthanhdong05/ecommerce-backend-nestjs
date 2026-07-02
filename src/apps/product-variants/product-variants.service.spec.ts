@@ -64,6 +64,15 @@ describe('ProductVariantsService', () => {
       configurable: true,
     });
 
+    jest.spyOn(service.prismaService, '$transaction').mockImplementation((cb: any) =>
+      cb({
+        productVariant: {
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+          create: jest.fn().mockImplementation((args) => mockExtended.create(args)),
+        },
+      }),
+    );
+
     verifyOwnershipSpy = jest
       .spyOn(productsService, 'verifyProductOwnership')
       .mockResolvedValue(mockProduct as any);

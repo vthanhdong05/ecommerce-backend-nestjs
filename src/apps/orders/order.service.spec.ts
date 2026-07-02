@@ -190,7 +190,7 @@ describe('OrdersService', () => {
 
       await service.createOrder(dto, mockUser);
 
-      expect(validateAndCalculateDiscountSpy).toHaveBeenCalledWith('SAVE10', 200, mockTx);
+      expect(validateAndCalculateDiscountSpy).toHaveBeenCalledWith('SAVE10', 200, mockTx, 2);
       expect(createOrderPromotionSpy).toHaveBeenCalledWith(
         { orderID: 'order-1', promotionID: 'promo-1', discountAmount: 20 },
         mockTx,

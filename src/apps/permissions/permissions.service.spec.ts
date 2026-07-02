@@ -19,6 +19,7 @@ const mockExtended = {
 const mockPrismaService = {
   permission: {},
   extended: { permission: mockExtended },
+  rolePermission: { findFirst: jest.fn().mockResolvedValue(null) },
 };
 
 const mockPaginationUtilService = {

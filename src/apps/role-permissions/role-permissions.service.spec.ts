@@ -1,8 +1,10 @@
+import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ExcelUtilService } from '../../common/utils/excel-util/excel-util.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { RolesService } from '../roles/roles.service';
+import { UsersService } from '../users/users.service';
 import { RolePermissionsService } from './role-permissions.service';
 
 const mockExtended = {
@@ -28,9 +30,12 @@ const mockPermissionsClient = {
   findMany: jest.fn(),
 };
 
+const mockTransaction = jest.fn();
+
 const mockPrismaService = {
   rolePermission: {},
   extended: { rolePermission: mockExtended },
+  $transaction: mockTransaction,
 };
 
 const mockExcelUtilService = {
@@ -46,6 +51,10 @@ const mockRolesService = {
 const mockPermissionsService = {
   client: mockPermissionsClient,
   extended: mockPermissionsExtended,
+};
+
+const mockUsersService = {
+  invalidatePermissionCache: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com' };
@@ -66,6 +75,7 @@ describe('RolePermissionsService', () => {
         { provide: ExcelUtilService, useValue: mockExcelUtilService },
         { provide: RolesService, useValue: mockRolesService },
         { provide: PermissionsService, useValue: mockPermissionsService },
+        { provide: UsersService, useValue: mockUsersService },
       ],
     }).compile();
 
@@ -122,13 +132,16 @@ describe('RolePermissionsService', () => {
           { roleName: 'Admin', permissionName: 'Create User', permissionKey: '[/users]_[create]' },
         ],
       });
-
       mockRolesClient.findMany.mockResolvedValue([{ id: 'role-id-1', name: 'Admin' }]);
       mockPermissionsClient.findMany.mockResolvedValue([{ id: 'perm-id-1', name: 'Create User' }]);
-      mockRolesExtended.createManyAndReturn.mockResolvedValue([]);
-      mockPermissionsExtended.createManyAndReturn.mockResolvedValue([]);
-      mockExtended.deleteMany.mockResolvedValue({ count: 1 });
-      mockExtended.createMany.mockResolvedValue({ count: 1 });
+      mockTransaction.mockImplementation((fn) =>
+        fn({
+          rolePermission: {
+            deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+            createMany: jest.fn().mockResolvedValue({ count: 1 }),
+          },
+        }),
+      );
 
       const result = await service.importRolePermissions({
         file: { path: 'test.xlsx', originalname: 'test.xlsx' } as any,
@@ -136,59 +149,49 @@ describe('RolePermissionsService', () => {
       });
 
       expect(result).toEqual({ count: 1 });
+      expect(mockUsersService.invalidatePermissionCache).toHaveBeenCalled();
     });
 
-    it('should create new roles if not exist', async () => {
+    it('should throw BadRequestException if role does not exist', async () => {
       mockExcelUtilService.read.mockResolvedValue({
         RolePermission: [
           {
-            roleName: 'NewRole',
+            roleName: 'NotExistRole',
             permissionName: 'Create User',
             permissionKey: '[/users]_[create]',
           },
         ],
       });
-
       mockRolesClient.findMany.mockResolvedValue([]);
       mockPermissionsClient.findMany.mockResolvedValue([{ id: 'perm-id-1', name: 'Create User' }]);
-      mockRolesExtended.createManyAndReturn.mockResolvedValue([
-        { id: 'role-id-2', name: 'NewRole' },
-      ]);
-      mockPermissionsExtended.createManyAndReturn.mockResolvedValue([]); // ← thêm mock trả về []
-      mockExtended.deleteMany.mockResolvedValue({ count: 0 });
-      mockExtended.createMany.mockResolvedValue({ count: 1 });
 
-      const result = await service.importRolePermissions({
-        file: { path: 'test.xlsx', originalname: 'test.xlsx' } as any,
-        user: mockUser,
-      });
-
-      expect(mockRolesExtended.createManyAndReturn).toHaveBeenCalled();
-      expect(result).toEqual({ count: 1 });
+      await expect(
+        service.importRolePermissions({
+          file: { path: 'test.xlsx', originalname: 'test.xlsx' } as any,
+          user: mockUser,
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
 
-    it('should create new permissions if not exist', async () => {
+    it('should throw BadRequestException if permission does not exist', async () => {
       mockExcelUtilService.read.mockResolvedValue({
         RolePermission: [
-          { roleName: 'Admin', permissionName: 'NewPermission', permissionKey: '[/new]_[create]' },
+          {
+            roleName: 'Admin',
+            permissionName: 'NotExistPermission',
+            permissionKey: '[/new]_[create]',
+          },
         ],
       });
-
       mockRolesClient.findMany.mockResolvedValue([{ id: 'role-id-1', name: 'Admin' }]);
       mockPermissionsClient.findMany.mockResolvedValue([]);
-      mockPermissionsExtended.createManyAndReturn.mockResolvedValue([
-        { id: 'perm-id-2', name: 'NewPermission' },
-      ]);
-      mockExtended.deleteMany.mockResolvedValue({ count: 0 });
-      mockExtended.createMany.mockResolvedValue({ count: 1 });
 
-      const result = await service.importRolePermissions({
-        file: { path: 'test.xlsx', originalname: 'test.xlsx' } as any,
-        user: mockUser,
-      });
-
-      expect(mockPermissionsExtended.createManyAndReturn).toHaveBeenCalled();
-      expect(result).toEqual({ count: 1 });
+      await expect(
+        service.importRolePermissions({
+          file: { path: 'test.xlsx', originalname: 'test.xlsx' } as any,
+          user: mockUser,
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

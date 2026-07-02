@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { AutoMockingModule } from 'src/testing/auto-mocking/auto-mocking.module';
 import { CreateOrderAddressDto } from './dto/create-order-address.dto';
 import { UpdateOrderAddressDto } from './dto/update-order-address.dto';
@@ -9,6 +10,7 @@ describe('OrderAddressesService', () => {
   // mock cho this.extended — dùng cho getOrderAddress, updateOrderAddress
   const mockExtended = {
     findUnique: jest.fn(),
+    findFirst: jest.fn(),
     update: jest.fn(),
   };
 
@@ -32,22 +34,24 @@ describe('OrderAddressesService', () => {
   });
 
   describe('getOrderAddress', () => {
-    it('should call findUnique with correct where and return the result', async () => {
+    it('should call findFirst with correct where and return the result', async () => {
       const mockData = { id: 'addr-1', orderID: 'order-1', fullAddress: '123 Le Loi' };
-      mockExtended.findUnique.mockResolvedValue(mockData);
+      mockExtended.findFirst.mockResolvedValue(mockData);
 
-      const result = await service.getOrderAddress({ id: 'addr-1' });
+      const result = await service.getOrderAddress({ id: 'addr-1', userID: 'user-1' });
 
-      expect(mockExtended.findUnique).toHaveBeenCalledWith({ where: { id: 'addr-1' } });
+      expect(mockExtended.findFirst).toHaveBeenCalledWith({
+        where: { id: 'addr-1', order: { userID: 'user-1' } },
+      });
       expect(result).toEqual(mockData);
     });
 
-    it('should return null when no record is found', async () => {
-      mockExtended.findUnique.mockResolvedValue(null);
+    it('should throw NotFoundException when no record is found', async () => {
+      mockExtended.findFirst.mockResolvedValue(null);
 
-      const result = await service.getOrderAddress({ id: 'not-exist' });
-
-      expect(result).toBeNull();
+      await expect(service.getOrderAddress({ id: 'not-exist', userID: 'user-1' })).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -76,20 +80,38 @@ describe('OrderAddressesService', () => {
       const updateDto: UpdateOrderAddressDto = {
         fullAddress: '456 Nguyen Hue',
       };
+      const mockExisting = { id: 'addr-1', orderID: 'order-1', fullAddress: '123 Le Loi' };
       const mockUpdated = { id: 'addr-1', orderID: 'order-1', fullAddress: '456 Nguyen Hue' };
 
+      mockExtended.findFirst.mockResolvedValue(mockExisting);
       mockExtended.update.mockResolvedValue(mockUpdated);
 
       const result = await service.updateOrderAddress({
         where: { id: 'addr-1' },
         data: updateDto,
+        userID: 'user-1',
       });
 
+      expect(mockExtended.findFirst).toHaveBeenCalledWith({
+        where: { id: 'addr-1', order: { userID: 'user-1' } },
+      });
       expect(mockExtended.update).toHaveBeenCalledWith({
         where: { id: 'addr-1' },
         data: updateDto,
       });
       expect(result).toEqual(mockUpdated);
+    });
+
+    it('should throw NotFoundException if address not found to update', async () => {
+      mockExtended.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.updateOrderAddress({
+          where: { id: 'not-exist' },
+          data: { fullAddress: '456 Nguyen Hue' },
+          userID: 'user-1',
+        }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

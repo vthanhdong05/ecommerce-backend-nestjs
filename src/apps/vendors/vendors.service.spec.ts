@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ExcelUtilService } from '../../common/utils/excel-util/excel-util.service';
@@ -19,10 +19,12 @@ const mockExtended = {
 };
 
 const mockUsersClient = { findMany: jest.fn() };
+const mockUserVendorRole = { findUnique: jest.fn() };
 
 const mockPrismaService = {
   vendor: {},
   extended: { vendor: mockExtended },
+  userVendorRole: mockUserVendorRole,
 };
 
 const mockPaginationUtilService = {
@@ -157,10 +159,15 @@ describe('VendorsService', () => {
   describe('updateVendorProfile', () => {
     it('should update vendor profile', async () => {
       const updated = { ...mockVendor, description: 'New description' };
+      mockUserVendorRole.findUnique.mockResolvedValue({
+        userID: 'user-id-1',
+        vendorID: 'vendor-id-1',
+      });
       mockExtended.update.mockResolvedValue(updated);
 
       const result = await service.updateVendorProfile({
         vendorID: 'vendor-id-1',
+        userID: 'user-id-1',
         data: { description: 'New description' },
       });
 
@@ -169,6 +176,18 @@ describe('VendorsService', () => {
         where: { id: 'vendor-id-1' },
         data: { description: 'New description' },
       });
+    });
+
+    it('should throw NotFoundException if user does not have a role in the vendor', async () => {
+      mockUserVendorRole.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.updateVendorProfile({
+          vendorID: 'vendor-id-1',
+          userID: 'user-id-1',
+          data: { description: 'New description' },
+        }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
