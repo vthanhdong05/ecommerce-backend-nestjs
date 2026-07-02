@@ -227,6 +227,12 @@ describe('ProductImagesService', () => {
     it('should upload image and upsert to db', async () => {
       mockExtended.findFirst.mockResolvedValue(null);
       jest.spyOn(fileUtilService, 'removeFileExtension').mockReturnValue('nike-air');
+      jest.spyOn(fileUtilService, 'uploadImage').mockResolvedValue({
+        url: 'http://cloudinary.com/image.jpg',
+        secure_url: 'https://cloudinary.com/image.jpg',
+        display_name: 'nike-air',
+        created_at: new Date().toISOString(),
+      });
       mockExtended.upsert.mockResolvedValue(mockImage);
 
       const result = await service.uploadProductImage({
