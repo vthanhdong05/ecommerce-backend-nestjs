@@ -1,0 +1,82 @@
+name: CI
+
+# KHI NÀO CHẠY:
+# - push vào develop: chạy CI ngay khi bạn code xong, tự kiểm tra cho chính mình (không có ai review, không chặn gì, chỉ để BẠN biết mình có làm hỏng gì không)
+# - pull_request vào main: đây là "gate" thật sự — PR từ develop -> main phải pass CI thì nút Merge trên GitHub mới sáng lên (sau khi bật branch protection)
+# - push vào main: quan trọng nhất — đây là lúc PR đã được merge, tạo ra 1 merge commit MỚI nằm trên main. Phải chạy lại CI trên chính commit này, vì đây mới là commit mà Render đang theo dõi để deploy
+# (chế độ "After CI Checks Pass" chỉ nhìn check status gắn với commit thật sự nằm trên main, không phải commit tạm trên PR).
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: ecommerce_test
+        ports:
+          - 5432:5432
+        # healthcheck: đảm bảo Postgres đã sẵn sàng nhận kết nối trước khi các step sau (migrate, test) chạy — tránh lỗi "connection refused"do container Postgres chưa kịp khởi động xong.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://test:test@localhost:5432/ecommerce_test
+      DIRECT_URL: postgresql://test:test@localhost:5432/ecommerce_test
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      NODE_ENV: test
+
+    steps:
+      # ── PHẦN 4: CÁC BƯỚC CHẠY TUẦN TỰ ──────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm' # cache node_modules giữa các lần chạy -> CI nhanh hơn
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+
+      - name: Run database migrations
+        run: npx prisma migrate deploy
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm run test
+
+      # e2e test tạm thời CHƯA bật ở bước này — vì e2e cần bootstrap toàn bộ
+      # AppModule thật (Cloudinary, mail...), phức tạp hơn unit test. Đây là
+      # việc bạn và tôi sẽ làm ở bước tiếp theo, sau khi pipeline cơ bản này
+      # đã chạy ổn định trước đã. Đừng cố làm hết 1 lần.
