@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { OrderItem, OrderStatus, Prisma } from '@prisma/client';
+import { OrderItem, OrderStatus, Prisma, PromotionScope } from '@prisma/client';
 import { UserInfo } from 'src/common/decorators/user.decorator';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { PrismaBaseService } from '../../common/services/prisma-base.service';
@@ -12,6 +12,7 @@ import { OrderItemsService } from '../order-items/order-items.service';
 import { OrderPromotionsService } from '../order-promotions/order-promotions.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { ALLOWED_VENDOR_STATUS_TRANSITIONS } from './const/order-status-transition.const';
+import { SHIPPING_FEE_PER_VENDOR } from './const/shipping.const';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { ExportOrdersDto, GetOrdersPaginationDto } from './dto/get-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
@@ -133,8 +134,9 @@ export class OrdersService extends PrismaBaseService<'order'> {
       // 4. Tính subtotal từ các OrderItem vừa tạo
       const subtotal = orderItems.reduce((sum, item) => sum + Number(item.totalPrice), 0);
       const totalQuantity = orderItems.reduce((sum, item) => sum + item.quantity, 0);
+      const vendorCount = new Set(orderItems.map((item) => item.vendorID)).size;
       let discountAmount = 0;
-      const shippingAmount = 0; // TODO: tính phí ship thật khi có Shipping module
+      const shippingAmount = vendorCount * SHIPPING_FEE_PER_VENDOR;
       // 5. Validate + áp dụng mã giảm giá đơn hàng (scope: ORDER)
       if (promotionCode) {
         const result = await this.promotionsService.validateAndCalculateDiscount(
@@ -157,7 +159,7 @@ export class OrdersService extends PrismaBaseService<'order'> {
       if (shippingPromotionCode) {
         const result = await this.promotionsService.validateAndCalculateDiscount(
           shippingPromotionCode,
-          shippingAmount, // base là phí ship, không phải subtotal
+          shippingAmount,
           tx,
           totalQuantity,
         );
@@ -279,19 +281,15 @@ export class OrdersService extends PrismaBaseService<'order'> {
       where: { id, orderItems: { some: { vendorID } } },
       include: { orderItems: true },
     });
-
     if (!order) throw new NotFoundException('Order not found');
-
     const cancellableStatuses: OrderStatus[] = [OrderStatus.pending, OrderStatus.confirmed];
     if (!cancellableStatuses.includes(order.status)) {
       throw new BadRequestException(
         `Cannot cancel items for an order with status "${order.status}"`,
       );
     }
-
     const vendorItems = order.orderItems.filter((item) => item.vendorID === vendorID);
     const remainingItems = order.orderItems.filter((item) => item.vendorID !== vendorID);
-
     return this.prismaService.$transaction(async (tx) => {
       // 1. Hoàn lại stock cho từng item của vendor
       for (const item of vendorItems) {
@@ -300,12 +298,10 @@ export class OrdersService extends PrismaBaseService<'order'> {
           data: { stockQuantity: { increment: item.quantity } },
         });
       }
-
       // 2. Xóa OrderItem của vendor
       await tx.orderItem.deleteMany({
         where: { orderID: id, vendorID },
       });
-
       // 3. Nếu không còn item nào → cancel toàn bộ Order
       if (remainingItems.length === 0) {
         return tx.order.update({
@@ -313,21 +309,44 @@ export class OrdersService extends PrismaBaseService<'order'> {
           data: { status: OrderStatus.cancelled, totalAmount: 0, subtotal: 0 },
         });
       }
-
-      // 4. Tính lại subtotal/totalAmount từ items còn lại
-      const newSubtotal = remainingItems.reduce((sum, item) => sum + Number(item.totalPrice), 0);
-
-      // Tính lại discountAmount theo tỉ lệ (nếu có promotion)
+      // 4. Tính lại shipping dựa trên vendor còn lại
       const originalSubtotal = Number(order.subtotal);
-      const discountRatio =
+      const newSubtotal = remainingItems.reduce((sum, item) => sum + Number(item.totalPrice), 0);
+      const newVendorCount = new Set(remainingItems.map((item) => item.vendorID)).size;
+      const newShippingAmount = newVendorCount * SHIPPING_FEE_PER_VENDOR;
+      // 5. Lấy discount SHIPPING đã áp (nếu có)
+      const orderShippingPromotion = await tx.orderPromotion.findFirst({
+        where: {
+          orderID: id,
+          promotion: { scope: PromotionScope.SHIPPING },
+        },
+        include: { promotion: true },
+      });
+      // 6. Validate discount SHIPPING không vượt quá shipping mới
+      let shippingDiscount = 0;
+      if (orderShippingPromotion) {
+        shippingDiscount = Math.min(
+          Number(orderShippingPromotion.discountAmount),
+          newShippingAmount,
+        );
+        if (shippingDiscount !== Number(orderShippingPromotion.discountAmount)) {
+          await tx.orderPromotion.update({
+            where: { id: orderShippingPromotion.id },
+            data: { discountAmount: shippingDiscount },
+          });
+        }
+      }
+      // 7. Tính lại totalDiscount và totalAmount
+      const discountOrderRatio =
         originalSubtotal > 0 ? Number(order.discountAmount) / originalSubtotal : 0;
-      const newDiscountAmount = Math.min(Math.round(newSubtotal * discountRatio), newSubtotal);
-      const newTotalAmount = Math.max(0, newSubtotal - newDiscountAmount);
-
+      const newDiscountOrder = Math.min(Math.round(newSubtotal * discountOrderRatio), newSubtotal);
+      const newDiscountAmount = newDiscountOrder + shippingDiscount;
+      const newTotalAmount = Math.max(0, newSubtotal + newShippingAmount - newDiscountAmount);
       return tx.order.update({
         where: { id },
         data: {
           subtotal: newSubtotal,
+          shippingAmount: newShippingAmount,
           discountAmount: newDiscountAmount,
           totalAmount: newTotalAmount,
         },
