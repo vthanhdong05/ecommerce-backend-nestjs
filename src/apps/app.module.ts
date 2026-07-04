@@ -35,6 +35,7 @@ import { OrderAddressesModule } from './order-addresses/order-addresses.module';
 import { OrderItemsModule } from './order-items/order-items.module';
 import { OrderPromotionsModule } from './order-promotions/order-promotions.module';
 import { OrdersModule } from './orders/orders.module';
+import { PaymentsModule } from './payments/payments.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { ProductCategoriesModule } from './product-categories/product-categories.module';
 import { ProductImagesModule } from './product-images/product-images.module';
@@ -90,6 +91,7 @@ import { VendorsModule } from './vendors/vendors.module';
     OrderPromotionsModule,
     CartsModule,
     CartItemsModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [
