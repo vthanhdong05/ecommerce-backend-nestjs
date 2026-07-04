@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OrderItem, OrderStatus, Prisma, PromotionScope } from '@prisma/client';
 import { UserInfo } from 'src/common/decorators/user.decorator';
+import { MailUtilService } from 'src/common/utils/mail-util/mail-util.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { PrismaBaseService } from '../../common/services/prisma-base.service';
 import { ExcelUtilService } from '../../common/utils/excel-util/excel-util.service';
@@ -24,6 +25,7 @@ export class OrdersService extends PrismaBaseService<'order'> {
   private excelSheets = {
     [this.orderEntityName]: this.orderEntityName,
   };
+  private readonly logger = new Logger(OrdersService.name);
 
   constructor(
     private excelUtilService: ExcelUtilService,
@@ -35,6 +37,7 @@ export class OrdersService extends PrismaBaseService<'order'> {
     private eventEmitter: EventEmitter2,
     private promotionsService: PromotionsService,
     private orderPromotionsService: OrderPromotionsService,
+    private mailUtilService: MailUtilService,
   ) {
     super(prismaService, 'order');
   }
@@ -193,6 +196,22 @@ export class OrdersService extends PrismaBaseService<'order'> {
       vendorIDs,
       productVariantIDs,
     });
+    // Gửi mail xác nhận đơn hàng
+    try {
+      const userEmail = user.userEmail;
+      await this.mailUtilService.sendMail({
+        to: userEmail,
+        subject: `Đơn hàng ${order.orderNumber} đã được tạo thành công`,
+        template: 'order-created',
+        context: {
+          orderNumber: order.orderNumber,
+          totalAmount: order.totalAmount,
+          createdAt: order.createdAt.toLocaleString('vi-VN'),
+        },
+      });
+    } catch {
+      this.logger.warn(`Failed to send order confirmation email for order ${order.orderNumber}`);
+    }
     return order;
   }
   private generateOrderNumber(): string {
@@ -342,6 +361,29 @@ export class OrdersService extends PrismaBaseService<'order'> {
       const newDiscountOrder = Math.min(Math.round(newSubtotal * discountOrderRatio), newSubtotal);
       const newDiscountAmount = newDiscountOrder + shippingDiscount;
       const newTotalAmount = Math.max(0, newSubtotal + newShippingAmount - newDiscountAmount);
+      // Gửi mail thông báo khi vendor hủy item
+      try {
+        const orderWithUser = await this.prismaService.order.findUnique({
+          where: { id },
+          include: { user: { select: { email: true, firstName: true } } },
+        });
+
+        if (orderWithUser?.user?.email) {
+          await this.mailUtilService.sendMail({
+            to: orderWithUser.user.email,
+            subject: `Cập nhật đơn hàng ${orderWithUser.orderNumber} - Có sản phẩm bị hủy`,
+            template: 'order-item-cancelled',
+            context: {
+              orderNumber: orderWithUser.orderNumber,
+              cancelledItemsCount: vendorItems.length,
+              newTotalAmount: newTotalAmount,
+              updatedAt: new Date().toLocaleString('vi-VN'),
+            },
+          });
+        }
+      } catch {
+        this.logger.warn(`Failed to send cancellation email for order ${id}`);
+      }
       return tx.order.update({
         where: { id },
         data: {
