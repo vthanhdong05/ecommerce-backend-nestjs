@@ -46,6 +46,12 @@ const baseEnvSchema = z.object({
   REDIS_PORT: zodWarnOptional(z.coerce.number(), 'REDIS_PORT'),
   REDIS_TTL: z.coerce.number().default(60000),
   REDIS_URL: zodWarnOptional(z.string().url(), 'REDIS_URL'),
+
+  VNPAY_TMN_CODE: zodWarnOptional(z.string(), 'VNPAY_TMN_CODE'),
+  VNPAY_HASH_SECRET: zodWarnOptional(z.string(), 'VNPAY_HASH_SECRET'),
+  VNPAY_URL: zodWarnOptional(z.string(), 'VNPAY_URL'),
+  VNPAY_RETURN_URL: zodWarnOptional(z.string(), 'VNPAY_RETURN_URL'),
+  VNPAY_IPN_URL: zodWarnOptional(z.string(), 'VNPAY_IPN_URL'),
 });
 
 const envSchema = baseEnvSchema.transform((data) => {

@@ -53,6 +53,7 @@ enum ProductStatus {
 
 enum OrderStatus {
   pending
+  pending_payment
   confirmed
   processing
   shipped
