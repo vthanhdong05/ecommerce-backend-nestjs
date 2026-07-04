@@ -1,17 +1,19 @@
 import { Module } from '@nestjs/common';
+import { MailUtilModule } from 'src/common/utils/mail-util/mail-util.module';
 import { StringUtilService } from 'src/common/utils/string-util/string-util.service';
 import { ExcelUtilModule } from '../../common/utils/excel-util/excel-util.module';
 import { PaginationUtilService } from '../../common/utils/pagination-util/pagination-util.service';
 import { OrderAddressesService } from '../order-addresses/order-addresses.service';
 import { OrderItemsService } from '../order-items/order-items.service';
+import { OrderPromotionsService } from '../order-promotions/order-promotions.service';
+import { PromotionsService } from '../promotions/promotions.service';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { VendorOrdersController } from './vendor-orders.controller';
-import { OrderPromotionsService } from '../order-promotions/order-promotions.service';
-import { PromotionsService } from '../promotions/promotions.service';
+import { MailUtilService } from 'src/common/utils/mail-util/mail-util.service';
 
 @Module({
-  imports: [ExcelUtilModule],
+  imports: [ExcelUtilModule, MailUtilModule],
   controllers: [OrdersController, VendorOrdersController],
   providers: [
     OrdersService,
@@ -21,6 +23,7 @@ import { PromotionsService } from '../promotions/promotions.service';
     OrderAddressesService,
     PromotionsService,
     OrderPromotionsService,
+    MailUtilService,
   ],
   exports: [OrdersService],
 })
