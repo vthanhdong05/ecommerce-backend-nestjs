@@ -1,5 +1,6 @@
+import { PaymentMethod } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
-import z from 'zod';
+import { z } from 'zod';
 
 // 1 item muốn mua — Service tự lấy giá thật từ ProductVariant trong DB, không tin giá client gửi
 const OrderItemInputSchema = z.object({
@@ -22,8 +23,12 @@ const OrderAddressInputSchema = z.object({
 export const CreateOrderSchema = z.object({
   items: z.array(OrderItemInputSchema).min(1, { message: 'At least one item is required' }),
   shippingAddress: OrderAddressInputSchema.optional(),
-  promotionCode: z.string().trim().optional(), // mã giảm giá đơn hàng (scope: ORDER)
-  shippingPromotionCode: z.string().trim().optional(), // mã giảm phí ship (scope: SHIPPING)
+  // Phương thức thanh toán: 'cod' hoặc 'vnpay' — bắt buộc
+  paymentMethod: z.nativeEnum(PaymentMethod, {
+    message: 'Payment method must be either "cod" or "vnpay"',
+  }),
+  promotionCode: z.string().trim().optional(),
+  shippingPromotionCode: z.string().trim().optional(),
   notes: z.string().trim().optional().nullable(),
 });
 
