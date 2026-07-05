@@ -1,6 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { OrderStatus, PromotionScope } from '@prisma/client';
+import { OrderStatus, PromotionScope, PaymentMethod } from '@prisma/client';
 import { ExcelUtilService } from '../../common/utils/excel-util/excel-util.service';
 import { PaginationUtilService } from '../../common/utils/pagination-util/pagination-util.service';
 import { StringUtilService } from '../../common/utils/string-util/string-util.service';
@@ -38,6 +38,7 @@ describe('OrdersService', () => {
     productVariant: { update: jest.fn() },
     orderItem: { deleteMany: jest.fn() },
     orderPromotion: { findFirst: jest.fn(), update: jest.fn() },
+    payment: { create: jest.fn() },
   };
 
   const mockUser = { userID: 'user-1', userEmail: 'user@example.com' };
@@ -228,6 +229,7 @@ describe('OrdersService', () => {
       mockTx.order.create.mockResolvedValue(baseNewOrder);
       mockTx.user.findUnique.mockResolvedValue(baseUserProfile);
       mockTx.order.update.mockResolvedValue({ id: 'order-1' });
+      mockTx.payment.create.mockResolvedValue({ id: 'payment-1' });
     });
 
     it('should calculate shipping fee as SHIPPING_FEE_PER_VENDOR for single vendor and custom shipping address', async () => {
@@ -245,6 +247,7 @@ describe('OrdersService', () => {
 
       const dto: CreateOrderDto = {
         items: [{ productVariantID: 'variant-1', quantity: 1 }],
+        paymentMethod: PaymentMethod.cod,
         shippingAddress: {
           firstName: 'Tran',
           lastName: 'Van B',
@@ -305,6 +308,7 @@ describe('OrdersService', () => {
 
       const dto: CreateOrderDto = {
         items: [{ productVariantID: 'variant-1', quantity: 1 }],
+        paymentMethod: PaymentMethod.cod,
       };
 
       await service.createOrder(dto, mockUser);
@@ -334,6 +338,7 @@ describe('OrdersService', () => {
 
       const dto: CreateOrderDto = {
         items: [{ productVariantID: 'variant-1', quantity: 1 }],
+        paymentMethod: PaymentMethod.cod,
       };
 
       await expect(service.createOrder(dto, mockUser)).rejects.toThrow(BadRequestException);
@@ -372,6 +377,7 @@ describe('OrdersService', () => {
           { productVariantID: 'variant-1', quantity: 1 },
           { productVariantID: 'variant-2', quantity: 1 },
         ],
+        paymentMethod: PaymentMethod.cod,
       };
 
       await service.createOrder(dto, mockUser);
@@ -422,6 +428,7 @@ describe('OrdersService', () => {
           { productVariantID: 'v2', quantity: 1 },
           { productVariantID: 'v3', quantity: 1 },
         ],
+        paymentMethod: PaymentMethod.cod,
       };
 
       await service.createOrder(dto, mockUser);
@@ -454,6 +461,7 @@ describe('OrdersService', () => {
 
       const dto: CreateOrderDto = {
         items: [{ productVariantID: 'variant-1', quantity: 2 }],
+        paymentMethod: PaymentMethod.cod,
         promotionCode: 'ORDER_CODE',
       };
 
@@ -487,6 +495,7 @@ describe('OrdersService', () => {
     it('should apply shipping promotion (scope: SHIPPING) and save it', async () => {
       const mockOrderItem = {
         id: 'item-1',
+        orderID: 'order-1',
         vendorID: 'vendor-1',
         productVariantID: 'variant-1',
         quantity: 1,
@@ -504,6 +513,7 @@ describe('OrdersService', () => {
 
       const dto: CreateOrderDto = {
         items: [{ productVariantID: 'variant-1', quantity: 1 }],
+        paymentMethod: PaymentMethod.cod,
         shippingPromotionCode: 'SHIP_CODE',
       };
 
@@ -532,6 +542,132 @@ describe('OrdersService', () => {
           totalAmount: 120000,
         }),
       });
+    });
+
+    it('should default paymentMethod to cod, create succeeded payment, and transition status to confirmed', async () => {
+      const mockOrderItem = {
+        id: 'item-1',
+        orderID: 'order-1',
+        vendorID: 'vendor-1',
+        productVariantID: 'variant-1',
+        quantity: 1,
+        totalPrice: 100000,
+      };
+
+      (orderItemsService.createOrderItem as jest.Mock).mockResolvedValue(mockOrderItem);
+      (orderAddressesService.createOrderAddress as jest.Mock).mockResolvedValue({});
+
+      const dto = {
+        items: [{ productVariantID: 'variant-1', quantity: 1 }],
+      } as CreateOrderDto;
+
+      await service.createOrder(dto, mockUser);
+
+      expect(mockTx.order.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'pending',
+            paymentMethod: 'cod',
+            expiredAt: null,
+          }),
+        }),
+      );
+
+      expect(mockTx.payment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            method: 'cod',
+            status: 'succeeded',
+            amount: 130000,
+            expiredAt: null,
+          }),
+        }),
+      );
+
+      expect(mockTx.order.update).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          where: { id: 'order-1' },
+          data: { status: 'confirmed' },
+        }),
+      );
+    });
+
+    it('should set initialStatus to pending_payment, calculate expiredAt, and create pending payment when paymentMethod is vnpay', async () => {
+      const mockOrderItem = {
+        id: 'item-1',
+        orderID: 'order-1',
+        vendorID: 'vendor-1',
+        productVariantID: 'variant-1',
+        quantity: 1,
+        totalPrice: 100000,
+      };
+
+      (orderItemsService.createOrderItem as jest.Mock).mockResolvedValue(mockOrderItem);
+      (orderAddressesService.createOrderAddress as jest.Mock).mockResolvedValue({});
+
+      const dto: CreateOrderDto = {
+        items: [{ productVariantID: 'variant-1', quantity: 1 }],
+        paymentMethod: PaymentMethod.vnpay,
+      };
+
+      await service.createOrder(dto, mockUser);
+
+      expect(mockTx.order.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'pending_payment',
+            paymentMethod: 'vnpay',
+            expiredAt: expect.any(Date),
+          }),
+        }),
+      );
+
+      expect(mockTx.payment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            method: 'vnpay',
+            status: 'pending',
+            amount: 130000,
+            expiredAt: expect.any(Date),
+          }),
+        }),
+      );
+
+      const orderUpdateCalls = mockTx.order.update.mock.calls;
+      const hasConfirmedUpdate = orderUpdateCalls.some(
+        (call) => call[0]?.data?.status === 'confirmed',
+      );
+      expect(hasConfirmedUpdate).toBe(false);
+    });
+
+    it('should throw BadRequestException when shipping discount exceeds shipping fee', async () => {
+      const mockOrderItem = {
+        id: 'item-1',
+        orderID: 'order-1',
+        vendorID: 'vendor-1',
+        productVariantID: 'variant-1',
+        quantity: 1,
+        totalPrice: 100000,
+      };
+
+      (orderItemsService.createOrderItem as jest.Mock).mockResolvedValue(mockOrderItem);
+      (orderAddressesService.createOrderAddress as jest.Mock).mockResolvedValue({});
+      (promotionsService.validateAndCalculateDiscount as jest.Mock).mockResolvedValue({
+        promotionID: 'promo-ship',
+        discountAmount: 40000,
+        scope: 'SHIPPING',
+      });
+
+      const dto: CreateOrderDto = {
+        items: [{ productVariantID: 'variant-1', quantity: 1 }],
+        paymentMethod: PaymentMethod.cod,
+        shippingPromotionCode: 'SHIP_EXCEED',
+      };
+
+      await expect(service.createOrder(dto, mockUser)).rejects.toThrow(BadRequestException);
+      await expect(service.createOrder(dto, mockUser)).rejects.toThrow(
+        /Shipping discount \(40000\) cannot exceed shipping fee \(30000\)/,
+      );
     });
   });
 
