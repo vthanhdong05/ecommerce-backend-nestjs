@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { MailUtilModule } from 'src/common/utils/mail-util/mail-util.module';
 import { StringUtilService } from 'src/common/utils/string-util/string-util.service';
 import { ExcelUtilModule } from '../../common/utils/excel-util/excel-util.module';
 import { PaginationUtilService } from '../../common/utils/pagination-util/pagination-util.service';
@@ -10,10 +9,10 @@ import { PromotionsService } from '../promotions/promotions.service';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { VendorOrdersController } from './vendor-orders.controller';
-import { MailUtilService } from 'src/common/utils/mail-util/mail-util.service';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
-  imports: [ExcelUtilModule, MailUtilModule],
+  imports: [ExcelUtilModule, PaymentsModule],
   controllers: [OrdersController, VendorOrdersController],
   providers: [
     OrdersService,
@@ -23,7 +22,6 @@ import { MailUtilService } from 'src/common/utils/mail-util/mail-util.service';
     OrderAddressesService,
     PromotionsService,
     OrderPromotionsService,
-    MailUtilService,
   ],
   exports: [OrdersService],
 })

@@ -53,6 +53,7 @@ enum ProductStatus {
 
 enum OrderStatus {
   pending
+  pending_payment
   confirmed
   processing
   shipped
@@ -81,6 +82,20 @@ enum PromotionType {
   percentage   
   fixed_amount  
   buy_x_get_y   
+}
+
+enum PaymentStatus {
+  pending
+  processing
+  succeeded
+  failed
+  refunded
+  cancelled
+}
+
+enum PaymentMethod {
+  cod
+  vnpay
 }
 model User {
   id          String     @id @default(uuid())
@@ -315,7 +330,9 @@ model Order {
   orderItems      OrderItem[]
   orderAddresses  OrderAddress[]
   orderPromotions OrderPromotion[]
-  // payments        Payment[]
+  paymentMethod     PaymentMethod?
+  expiredAt         DateTime?     // 24h sau khi tạo nếu chọn VNPay
+  payments          Payment[]
 }
 
 model OrderItem {
@@ -406,3 +423,35 @@ model CartItem {
   @@unique([cartID, productVariantID])
 }
 
+model Payment {
+  id               String        @id @default(uuid())
+  orderID          String
+  order            Order         @relation(fields: [orderID], references: [id])
+  method           PaymentMethod
+  status           PaymentStatus @default(pending)
+  amount           Decimal       @db.Decimal(18, 2)
+  // VNPay fields
+  vnpTxnRef        String?       @unique
+  vnpTransactionNo String?
+  vnpBankCode      String?
+  vnpBankTranNo    String?
+  vnpCardType      String?
+  vnpPayDate       DateTime?
+  vnpResponseCode  String?
+  // Refund
+  refundAmount     Decimal?      @default(0) @db.Decimal(18, 2)
+  refundDate       DateTime?
+  refundReason     String?
+  refundTxnRef     String?
+  refundResponseCode String?
+  // Audit
+  expiredAt        DateTime?     // thời hạn thanh toán (24h)
+  createdAt        DateTime      @default(now())
+  createdBy        String?
+  updatedAt        DateTime      @updatedAt
+  deletedAt        DateTime?
+  
+  @@index([orderID])
+  @@index([status])
+  @@index([vnpTxnRef])
+}

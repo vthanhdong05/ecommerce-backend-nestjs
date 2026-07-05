@@ -15,6 +15,8 @@ export class Order implements OrderPrisma {
   notes!: string | null;
   shippedAt!: Date | null;
   deliveredAt!: Date | null;
+  paymentMethod!: $Enums.PaymentMethod | null;
+  expiredAt!: Date | null;
   createdAt!: Date;
   createdBy!: string | null;
   updatedAt!: Date;

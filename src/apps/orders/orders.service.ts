@@ -1,8 +1,14 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { OrderItem, OrderStatus, Prisma, PromotionScope } from '@prisma/client';
+import {
+  OrderItem,
+  OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
+  Prisma,
+  PromotionScope,
+} from '@prisma/client';
 import { UserInfo } from 'src/common/decorators/user.decorator';
-import { MailUtilService } from 'src/common/utils/mail-util/mail-util.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { PrismaBaseService } from '../../common/services/prisma-base.service';
 import { ExcelUtilService } from '../../common/utils/excel-util/excel-util.service';
@@ -11,6 +17,8 @@ import { StringUtilService } from '../../common/utils/string-util/string-util.se
 import { OrderAddressesService } from '../order-addresses/order-addresses.service';
 import { OrderItemsService } from '../order-items/order-items.service';
 import { OrderPromotionsService } from '../order-promotions/order-promotions.service';
+import { PAYMENT_EXPIRE_HOURS } from '../payments/const/vnpay.const';
+import { PaymentsService } from '../payments/payments.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { ALLOWED_VENDOR_STATUS_TRANSITIONS } from './const/order-status-transition.const';
 import { SHIPPING_FEE_PER_VENDOR } from './const/shipping.const';
@@ -25,7 +33,6 @@ export class OrdersService extends PrismaBaseService<'order'> {
   private excelSheets = {
     [this.orderEntityName]: this.orderEntityName,
   };
-  private readonly logger = new Logger(OrdersService.name);
 
   constructor(
     private excelUtilService: ExcelUtilService,
@@ -37,7 +44,7 @@ export class OrdersService extends PrismaBaseService<'order'> {
     private eventEmitter: EventEmitter2,
     private promotionsService: PromotionsService,
     private orderPromotionsService: OrderPromotionsService,
-    private mailUtilService: MailUtilService,
+    private paymentsService: PaymentsService,
   ) {
     super(prismaService, 'order');
   }
@@ -100,21 +107,40 @@ export class OrdersService extends PrismaBaseService<'order'> {
   }
 
   async createOrder(createOrderDto: CreateOrderDto, user: UserInfo) {
-    const { items, shippingAddress, promotionCode, shippingPromotionCode, notes } = createOrderDto;
+    const {
+      items,
+      shippingAddress,
+      promotionCode,
+      shippingPromotionCode,
+      notes,
+      paymentMethod = PaymentMethod.cod,
+    } = createOrderDto;
+
+    // Tính expiredAt cho VNPay
+    const expiredAt =
+      paymentMethod === PaymentMethod.vnpay
+        ? new Date(Date.now() + PAYMENT_EXPIRE_HOURS * 60 * 60 * 1000)
+        : null;
+
     const { order, orderItems } = await this.prismaService.$transaction(async (tx) => {
-      // 1. Tạo Order rỗng trước (chưa biết tổng tiền), để có orderID gắn cho item/address
+      // 1. Tạo Order (thay đổi status ban đầu)
+      const initialStatus = paymentMethod === PaymentMethod.vnpay ? 'pending_payment' : 'pending';
+
       const newOrder = await tx.order.create({
         data: {
           orderNumber: this.generateOrderNumber(),
           userID: user.userID,
-          status: OrderStatus.pending,
+          status: initialStatus,
+          paymentMethod,
+          expiredAt,
           subtotal: 0,
           totalAmount: 0,
           notes,
           createdBy: user.userEmail,
         },
       });
-      // 2. Tạo từng OrderItem — tự validate stock, tự tính giá, tự trừ kho (throw lỗi -> rollback toàn bộ)
+
+      // 2. Tạo từng OrderItem
       const orderItems: OrderItem[] = [];
       for (const item of items) {
         const orderItem = await this.orderItemsService.createOrderItem(
@@ -127,20 +153,24 @@ export class OrdersService extends PrismaBaseService<'order'> {
         );
         orderItems.push(orderItem);
       }
-      // 3. Resolve địa chỉ giao hàng — dùng body nếu có, không thì fallback User profile
+
+      // 3. Resolve địa chỉ giao hàng
       const resolvedAddress =
         shippingAddress ?? (await this.resolveAddressFromUserProfile(user.userID, tx));
       await this.orderAddressesService.createOrderAddress(
         { orderID: newOrder.id, type: 'shipping', ...resolvedAddress },
         tx,
       );
-      // 4. Tính subtotal từ các OrderItem vừa tạo
+
+      // 4. Tính subtotal và shipping
       const subtotal = orderItems.reduce((sum, item) => sum + Number(item.totalPrice), 0);
       const totalQuantity = orderItems.reduce((sum, item) => sum + item.quantity, 0);
       const vendorCount = new Set(orderItems.map((item) => item.vendorID)).size;
-      let discountAmount = 0;
       const shippingAmount = vendorCount * SHIPPING_FEE_PER_VENDOR;
-      // 5. Validate + áp dụng mã giảm giá đơn hàng (scope: ORDER)
+
+      let discountAmount = 0;
+
+      // 5. Apply ORDER promotion
       if (promotionCode) {
         const result = await this.promotionsService.validateAndCalculateDiscount(
           promotionCode,
@@ -158,7 +188,8 @@ export class OrdersService extends PrismaBaseService<'order'> {
           tx,
         );
       }
-      // 6. Validate + áp dụng mã giảm phí ship (scope: SHIPPING)
+
+      // 6. Apply SHIPPING promotion
       if (shippingPromotionCode) {
         const result = await this.promotionsService.validateAndCalculateDiscount(
           shippingPromotionCode,
@@ -166,6 +197,11 @@ export class OrdersService extends PrismaBaseService<'order'> {
           tx,
           totalQuantity,
         );
+        if (result.discountAmount > shippingAmount) {
+          throw new BadRequestException(
+            `Shipping discount (${result.discountAmount}) cannot exceed shipping fee (${shippingAmount})`,
+          );
+        }
         discountAmount += result.discountAmount;
         await this.orderPromotionsService.createOrderPromotion(
           {
@@ -176,15 +212,37 @@ export class OrdersService extends PrismaBaseService<'order'> {
           tx,
         );
       }
-      // 7. Tính totalAmount cuối cùng — Math.max(0) tránh số âm khi discount > subtotal
+
+      // 7. Tính totalAmount
       const totalAmount = Math.max(0, subtotal + shippingAmount - discountAmount);
 
-      const updatedOrder = await tx.order.update({
+      let updatedOrder = await tx.order.update({
         where: { id: newOrder.id },
         data: { subtotal, shippingAmount, discountAmount, totalAmount },
       });
 
-      return { order: updatedOrder, orderItems };
+      // 8. TẠO PAYMENT
+      const payment = await tx.payment.create({
+        data: {
+          orderID: newOrder.id,
+          method: paymentMethod,
+          status:
+            paymentMethod === PaymentMethod.cod ? PaymentStatus.succeeded : PaymentStatus.pending,
+          amount: totalAmount,
+          expiredAt,
+          createdBy: user.userEmail,
+        },
+      });
+
+      // 9. NẾU COD → update order status = confirmed
+      if (paymentMethod === PaymentMethod.cod) {
+        updatedOrder = await tx.order.update({
+          where: { id: newOrder.id },
+          data: { status: 'confirmed' },
+        });
+      }
+
+      return { order: updatedOrder, orderItems, paymentID: payment.id };
     });
 
     // 8. Sau khi transaction commit thành công — emit event cho các việc phụ
@@ -196,22 +254,6 @@ export class OrdersService extends PrismaBaseService<'order'> {
       vendorIDs,
       productVariantIDs,
     });
-    // Gửi mail xác nhận đơn hàng
-    try {
-      const userEmail = user.userEmail;
-      await this.mailUtilService.sendMail({
-        to: userEmail,
-        subject: `Đơn hàng ${order.orderNumber} đã được tạo thành công`,
-        template: 'order-created',
-        context: {
-          orderNumber: order.orderNumber,
-          totalAmount: order.totalAmount,
-          createdAt: order.createdAt.toLocaleString('vi-VN'),
-        },
-      });
-    } catch {
-      this.logger.warn(`Failed to send order confirmation email for order ${order.orderNumber}`);
-    }
     return order;
   }
   private generateOrderNumber(): string {
@@ -361,29 +403,6 @@ export class OrdersService extends PrismaBaseService<'order'> {
       const newDiscountOrder = Math.min(Math.round(newSubtotal * discountOrderRatio), newSubtotal);
       const newDiscountAmount = newDiscountOrder + shippingDiscount;
       const newTotalAmount = Math.max(0, newSubtotal + newShippingAmount - newDiscountAmount);
-      // Gửi mail thông báo khi vendor hủy item
-      try {
-        const orderWithUser = await this.prismaService.order.findUnique({
-          where: { id },
-          include: { user: { select: { email: true, firstName: true } } },
-        });
-
-        if (orderWithUser?.user?.email) {
-          await this.mailUtilService.sendMail({
-            to: orderWithUser.user.email,
-            subject: `Cập nhật đơn hàng ${orderWithUser.orderNumber} - Có sản phẩm bị hủy`,
-            template: 'order-item-cancelled',
-            context: {
-              orderNumber: orderWithUser.orderNumber,
-              cancelledItemsCount: vendorItems.length,
-              newTotalAmount: newTotalAmount,
-              updatedAt: new Date().toLocaleString('vi-VN'),
-            },
-          });
-        }
-      } catch {
-        this.logger.warn(`Failed to send cancellation email for order ${id}`);
-      }
       return tx.order.update({
         where: { id },
         data: {
