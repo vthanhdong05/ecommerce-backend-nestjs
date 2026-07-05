@@ -136,7 +136,7 @@ export class VNPayService {
         vnpBankCode: params.vnp_BankCode,
         vnpBankTranNo: params.vnp_BankTranNo,
         vnpCardType: params.vnp_CardType,
-        vnpPayDate: new Date(this.parseVNPayDate(params.vnp_PayDate)),
+        vnpPayDate: new Date(this.parseVNPayDate(params.vnp_PayDate)).toISOString(),
         vnpResponseCode: responseCode,
       });
     } else {

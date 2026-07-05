@@ -8,7 +8,7 @@ export const UpdatePaymentSchema = z.object({
   vnpBankCode: z.string().trim().optional().nullable(),
   vnpBankTranNo: z.string().trim().optional().nullable(),
   vnpCardType: z.string().trim().optional().nullable(),
-  vnpPayDate: z.coerce.date().optional().nullable(),
+  vnpPayDate: z.string().optional().nullable(),
   vnpResponseCode: z.string().trim().optional().nullable(),
 });
 

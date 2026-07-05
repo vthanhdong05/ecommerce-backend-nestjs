@@ -95,6 +95,13 @@ export class PaymentsController {
     }
   }
 
+  @Post('admin/cancel-expired')
+  @SkipPermission()
+  async triggerCancel() {
+    const count = await this.paymentsService.cancelExpiredPayments();
+    return { cancelledCount: count };
+  }
+
   @Get(':id')
   @SkipPermission()
   getPayment(@Param('id') id: Payment['id'], @User() user: UserInfo) {
