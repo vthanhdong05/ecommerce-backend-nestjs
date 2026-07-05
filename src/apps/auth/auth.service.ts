@@ -59,21 +59,6 @@ export class AuthService {
       password,
       ...otherInfo,
     });
-    try {
-      await this.mailUtilService.sendMail({
-        to: email,
-        subject: 'Chào mừng bạn đến với cửa hàng!',
-        template: 'welcome',
-        context: {
-          username: otherInfo.firstName ?? email,
-          email: email,
-          createdAt: new Date().toLocaleString('vi-VN'),
-        },
-      });
-    } catch {
-      console.warn(`Failed to send welcome email to ${email}`);
-    }
-
     const { password: _password, ...userResponse } = userCreated;
     return userResponse;
   }
