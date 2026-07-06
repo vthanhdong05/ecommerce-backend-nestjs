@@ -1,81 +1,137 @@
-# Multi-Vendor E-Commerce Backend (NestJS)
+# VTDhub - Multi-Vendor E-Commerce Backend
 
-A production-oriented REST API for a multi-vendor e-commerce marketplace, built with NestJS, Prisma, and PostgreSQL. Supports independent vendor shops, role-based access control scoped per vendor, product variants, promotions, and order management — the core domain logic behind platforms like Shopee or Etsy.
+![NestJS](https://img.shields.io/badge/NestJS-11-red)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue)
+![Prisma](https://img.shields.io/badge/Prisma-6.15-2D3748)
+![License](https://img.shields.io/badge/License-Private-yellow)
+![Redis](https://img.shields.io/badge/Redis-red)
 
-**Live API:** _coming soon_
-**API Docs (Swagger):** `/api-docs` _(once deployed)_
+## 📖 Overview
 
-## Why this project
+RESTful API backend for a multi-vendor e-commerce marketplace, supporting authentication, product management with variants, shopping cart, orders, promotions, shipping fee calculation by vendor count, and payments (COD + VNPay).
 
-Most CRUD tutorials stop at "create a product." This project goes further into the parts that are actually hard in a real marketplace backend:
+## 🛠 Tech Stack
 
-- **Two-tier authorization** — a global admin can manage everything, while a vendor can only act within their own shop. The same service layer powers both `/products` (admin) and `/vendors/:vendorId/products` (vendor-scoped) controllers, with ownership checks enforced at the database query level, not just at the route.
-- **Permission system, not just roles** — permissions are computed per route + HTTP method (`[/products]_[CREATE]`), checked against role-permission mappings stored in the database, so access control changes don't require a redeploy.
-- **Soft delete and audit fields applied globally** — handled once via a Prisma Client Extension, not repeated in every service (`deletedAt`, `createdBy`, slug generation are automatic for every model).
-- **Price/stock integrity between Product and its default variant** — every product implicitly owns a hidden default `ProductVariant`, kept in sync on update so order pricing always reads from the variant layer, never directly from the product.
+| Layer          | Technology                    |
+| -------------- | ----------------------------- |
+| Framework      | NestJS 11                     |
+| Language       | TypeScript 5.7                |
+| Database       | PostgreSQL 16 (Prisma ORM)    |
+| Cache          | Redis                         |
+| Authentication | JWT (Access + Refresh tokens) |
+| Validation     | Zod + nestjs-zod              |
+| Payment        | VNPay Sandbox                 |
+| File Storage   | Cloudinary                    |
+| Email          | Nodemailer + Pug templates    |
+| Real-time      | Socket.IO                     |
+| Deployment     | Render + Supabase             |
 
-## Tech Stack
+## ✨ Features
 
-| Layer               | Choice                                                          |
-| ------------------- | --------------------------------------------------------------- |
-| Framework           | NestJS 11                                                       |
-| Database            | PostgreSQL (Prisma ORM)                                         |
-| Validation          | Zod (via `nestjs-zod`), generated directly into Swagger/OpenAPI |
-| Auth                | JWT (access + refresh), cookie or Bearer header                 |
-| Cache               | Redis (`@keyv/redis`), with graceful degradation if unavailable |
-| File storage        | Cloudinary                                                      |
-| Email               | Nodemailer + Pug templates                                      |
-| Realtime            | Socket.IO (order/vendor events)                                 |
-| Excel import/export | ExcelJS, with per-vendor scoping on import                      |
-| Containerization    | Docker (multi-stage build)                                      |
-| Testing             | Jest (unit + e2e)                                               |
+- [x] **Authentication** - JWT login/register, password reset via email
+- [x] **RBAC 2-Layer** - System roles (admin) + Vendor roles (staff)
+- [x] **Multi-Vendor** - Independent vendor shops with ownership verification
+- [x] **Products** - CRUD with variants (size, color, attributes JSON), publish workflow
+- [x] **Categories** - Hierarchical category tree
+- [x] **Orders** - Multi-vendor orders with shipping fee calculation
+- [x] **Shipping Fee** - 30,000 VND × number of vendors in order
+- [x] **Payments** - COD (cash on delivery) + VNPay (online payment)
+- [x] **Promotions** - Percentage, Fixed amount, Buy X Get Y
+- [x] **Carts** - Shopping cart with add/update/remove items
+- [x] **Images** - Upload to Cloudinary
+- [x] **Excel Import/Export** - Bulk operations for products, orders
+- [x] **Cron Jobs** - Auto-cancel pending payments after 24h
+- [x] **Soft Delete** - Global via Prisma Client Extension
+- [x] **Email Notifications** - Welcome email, order confirmation
 
-## Architecture highlights
+## 📁 Project Structure
 
-**Domain-driven module structure.** Each business entity (`products`, `orders`, `vendors`, `promotions`...) is a self-contained NestJS module with its own controller, service, DTO (Zod schema), and Prisma-backed entity — 20+ modules following the same convention, making the codebase predictable to navigate.
-
-**Database layer extends Prisma, doesn't wrap it.** Instead of a generic repository pattern, `PrismaService` uses Prisma Client Extensions (`$extends`) to inject cross-cutting behavior into every query:
-
-```ts
-findMany: ({ args, query, model }) => {
-  if (!JUNCTION_TABLES.includes(model)) {
-    args.where = { ...args.where, deletedAt: null };
-  }
-  return query(args);
-};
+```text
+src/
+├── apps/
+│   ├── auth/                 # JWT authentication, login, register
+│   ├── users/                # User management, profile
+│   ├── roles/                # Role definitions
+│   ├── permissions/          # Permission management
+│   ├── role-permissions/     # Role ↔ Permission mappings
+│   ├── user-system-role/     # User ↔ System role
+│   ├── user-vendor-roles/    # User ↔ Vendor ↔ Role
+│   ├── vendors/              # Vendor/shop management
+│   ├── products/             # Product CRUD, publish workflow
+│   ├── product-variants/     # Size, color, attributes
+│   ├── product-images/       # Image upload (Cloudinary)
+│   ├── product-categories/   # Product ↔ Category
+│   ├── categories/           # Hierarchical categories
+│   ├── orders/               # Order management
+│   ├── order-items/          # Line items
+│   ├── order-addresses/      # Shipping/Billing addresses
+│   ├── order-promotions/     # Applied promotions
+│   ├── promotions/           # Discount codes
+│   ├── payments/             # Payment (COD, VNPay)
+│   ├── carts/                # Shopping cart
+│   └── cart-items/           # Cart line items
+│
+├── common/
+│   ├── prisma/               # PrismaService & extensions
+│   ├── guards/               # RBAC guards
+│   ├── decorators/           # Custom decorators
+│   ├── interceptors/         # Response formatting & logging
+│   ├── pipes/                # Validation pipes
+│   ├── middleware/           # Custom middleware
+│   └── utils/                # Helpers (pagination, mail, cache, excel, ...)
+│
+├── events/                   # Socket.IO gateway
+├── catch-everything/         # Global exception filter
+├── testing/                  # Test utilities
+└── main.ts                   # Application entry point
 ```
 
-This means soft delete, slug generation, and `createdBy` tracking are correct by construction — a developer adding a new model gets these for free, with no risk of forgetting a `where: { deletedAt: null }` somewhere.
+## 🗄️ Database Schema
 
-**Database connection split for pooled vs. direct access.** The app connects through Supabase's connection pooler (`pgbouncer`) for normal queries, but uses a direct connection (`directUrl`) for Prisma migrations — a detail that's easy to miss and causes silent migration failures in serverless/pooled Postgres setups if skipped.
+**21 Prisma entities:** Users, Vendors, Products, ProductVariants, ProductImages, Categories, Orders, OrderItems, OrderAddresses, OrderPromotions, Promotions, Payments, Carts, CartItems, Roles, Permissions, RolePermissions, UserSystemRoles, UserVendorRoles.
 
-## Local Development
+[View Database Schema on DrawSQL](https://drawsql.app/teams/vthanhdong/diagrams/database-nestjs-ecommerce)
+
+## 📚 API Documentation
+
+**Swagger UI:** https://ecommerce-backend-nestjs-3yvn.onrender.com/api-docs
+
+## 🚀 Setup
 
 ### Prerequisites
 
 - Node.js 20+
 - Docker & Docker Compose
 
-### Setup
+### Installation
 
 ```bash
+# Clone repository
 git clone https://github.com/vthanhdong05/ecommerce-backend-nestjs.git
-cd ecommerce-backend-nestjs
-cp .env.example .env   # fill in your local values
+
+# Install dependencies
 npm install
+
+# Copy environment file
+cp .env.example .env
 ```
 
-### Run with Docker (Postgres + Redis, app on host)
+### Run with Docker (PostgreSQL + Redis)
 
 ```bash
+# Start PostgreSQL and Redis containers
 docker-compose up -d postgres redis
+
+# Generate Prisma Client
 npx prisma generate
-npx prisma migrate dev
+
+# Run migrations
+npx prisma migrate dev --name init
+
+# Start development server
 npm run start:dev
 ```
-
-API available at `http://localhost:8888/api`
-Swagger UI at `http://localhost:8888/api-docs`
 
 ### Run fully containerized
 
@@ -83,34 +139,40 @@ Swagger UI at `http://localhost:8888/api-docs`
 docker-compose up -d
 ```
 
-## Environment Variables
+### Environment Variables
 
-See [`.env.example`](./.env.example) for the full list. Key variables:
+| Variable               | Description                         |
+| ---------------------- | ----------------------------------- |
+| `DATABASE_URL`         | PostgreSQL connection string        |
+| `DIRECT_URL`           | Direct connection (migrations only) |
+| `JWT_SECRET`           | Access token signing                |
+| `REFRESH_TOKEN_SECRET` | Refresh token signing               |
+| `VNPAY_TMN_CODE`       | VNPay merchant code                 |
+| `VNPAY_HASH_SECRET`    | VNPay API secret                    |
+| `CLOUDINARY_*`         | Cloudinary credentials              |
+| `MAIL_*`               | SMTP email credentials              |
+| `REDIS_*`              | Redis connection                    |
 
-| Variable                           | Purpose                                    |
-| ---------------------------------- | ------------------------------------------ |
-| `DATABASE_URL`                     | Pooled connection string (runtime queries) |
-| `DIRECT_URL`                       | Direct connection string (migrations only) |
-| `JWT_SECRET`, `RESET_TOKEN_SECRET` | Auth token signing                         |
-| `REDIS_HOST`, `REDIS_PORT`         | Optional — falls back gracefully if unset  |
-| `CLOUDINARY_*`                     | Image upload provider                      |
-
-## Database Schema
-
-The data model covers: users, vendors, role-based permissions (system + per-vendor), products with variants and images, categories, multi-vendor orders, promotions, and carts. Full schema in [`prisma/schema.prisma`](./prisma/schema.prisma).
-
-## Testing
+## 🧪 Testing
 
 ```bash
-npm run test        # unit tests
-npm run test:e2e    # end-to-end tests
-npm run test:cov    # coverage report
+# Unit tests
+npm run test
+
+# End-to-end tests
+npm run test:e2e
+
+# Coverage report
+npm run test:cov
 ```
 
-## Deployment
+## 📄 License
 
-Containerized via a multi-stage Dockerfile (builder stage compiles + generates Prisma Client, production stage runs `prisma migrate deploy` on boot, then starts the compiled app). Deployed on Render, connected to a managed PostgreSQL instance on Supabase.
+Private - for portfolio and educational purposes only.
 
-## Author
+---
 
-**[Your name]** — [LinkedIn] · [GitHub] · [Portfolio]
+**Author:** Võ Thành Đông
+**Email:** v.thanhdong05@gmail.com
+**LinkedIn:** https://www.linkedin.com/in/thành-đông-võ-1aa270420
+**GitHub:** https://github.com/vthanhdong05
