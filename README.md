@@ -47,41 +47,45 @@ RESTful API backend for a multi-vendor e-commerce marketplace, supporting authen
 
 ## 📁 Project Structure
 
+```text
 src/
 ├── apps/
-│ ├── auth/ # JWT authentication, login, register
-│ ├── users/ # User management, profile
-│ ├── roles/ # Role definitions
-│ ├── permissions/ # Permission management
-│ ├── role-permissions/ # Role ↔ Permission mappings
-│ ├── user-system-role/ # User ↔ System role
-│ ├── user-vendor-roles/ # User ↔ Vendor ↔ Role
-│ ├── vendors/ # Vendor/shop management
-│ ├── products/ # Product CRUD, publish workflow
-│ ├── product-variants/ # Size, color, attributes
-│ ├── product-images/ # Image upload (Cloudinary)
-│ ├── product-categories/ # Product ↔ Category
-│ ├── categories/ # Hierarchical categories
-│ ├── orders/ # Order management
-│ ├── order-items/ # Line items
-│ ├── order-addresses/ # Shipping/billing address
-│ ├── order-promotions/ # Applied promotions
-│ ├── promotions/ # Discount codes
-│ ├── payments/ # Payment (COD + VNPay)
-│ ├── carts/ # Shopping cart
-│ └── cart-items/ # Cart line items
+│   ├── auth/                 # JWT authentication, login, register
+│   ├── users/                # User management, profile
+│   ├── roles/                # Role definitions
+│   ├── permissions/          # Permission management
+│   ├── role-permissions/     # Role ↔ Permission mappings
+│   ├── user-system-role/     # User ↔ System role
+│   ├── user-vendor-roles/    # User ↔ Vendor ↔ Role
+│   ├── vendors/              # Vendor/shop management
+│   ├── products/             # Product CRUD, publish workflow
+│   ├── product-variants/     # Size, color, attributes
+│   ├── product-images/       # Image upload (Cloudinary)
+│   ├── product-categories/   # Product ↔ Category
+│   ├── categories/           # Hierarchical categories
+│   ├── orders/               # Order management
+│   ├── order-items/          # Line items
+│   ├── order-addresses/      # Shipping/Billing addresses
+│   ├── order-promotions/     # Applied promotions
+│   ├── promotions/           # Discount codes
+│   ├── payments/             # Payment (COD, VNPay)
+│   ├── carts/                # Shopping cart
+│   └── cart-items/           # Cart line items
+│
 ├── common/
-│ ├── prisma/ # PrismaService + extensions
-│ ├── guards/ # AccessControlGuard (RBAC)
-│ ├── decorators/ # Custom decorators
-│ ├── interceptors/ # Response formatting, logging
-│ ├── pipes/ # Validation pipes
-│ ├── middleware/ # Custom middleware
-│ └── utils/ # Helpers (pagination, string, date, mail, excel, cache...)
-├── events/ # WebSocket gateway (Socket.IO)
-├── catch-everything/ # Global exception filter
-├── testing/ # Test utilities
-└── main.ts # Application entry point
+│   ├── prisma/               # PrismaService & extensions
+│   ├── guards/               # RBAC guards
+│   ├── decorators/           # Custom decorators
+│   ├── interceptors/         # Response formatting & logging
+│   ├── pipes/                # Validation pipes
+│   ├── middleware/           # Custom middleware
+│   └── utils/                # Helpers (pagination, mail, cache, excel, ...)
+│
+├── events/                   # Socket.IO gateway
+├── catch-everything/         # Global exception filter
+├── testing/                  # Test utilities
+└── main.ts                   # Application entry point
+```
 
 ## 🗄️ Database Schema
 
@@ -105,7 +109,6 @@ src/
 ```bash
 # Clone repository
 git clone https://github.com/vthanhdong05/ecommerce-backend-nestjs.git
-cd ecommerce-backend-nestjs
 
 # Install dependencies
 npm install
