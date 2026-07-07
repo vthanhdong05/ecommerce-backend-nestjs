@@ -97,6 +97,12 @@ src/
 
 **Swagger UI:** https://ecommerce-backend-nestjs-3yvn.onrender.com/api-docs
 
+### 🔑 Test Account
+
+| Role        | Email                 | Password      |
+| ----------- | --------------------- | ------------- |
+| Super Admin | superAdmin@vtdhub.com | superadmin123 |
+
 ## 🚀 Setup
 
 ### Prerequisites

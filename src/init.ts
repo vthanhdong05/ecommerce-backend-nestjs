@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { cleanupOpenApiDoc, ZodValidationPipe } from 'nestjs-zod';
+import { addMissingPathParams, addMissingQueryParams } from './common/helpers/swagger.helper';
 import { applyMiddleware } from './common/middleware/common.middleware';
 
 const initOpenAPI = (app: INestApplication) => {
@@ -13,8 +14,11 @@ const initOpenAPI = (app: INestApplication) => {
       .setVersion('1.0.0')
       .build(),
   );
+  const cleanedDoc = cleanupOpenApiDoc(openApiDoc);
+  const docWithPathParams = addMissingPathParams(cleanedDoc);
+  const docWithAllParams = addMissingQueryParams(docWithPathParams);
 
-  SwaggerModule.setup('api-docs', app, cleanupOpenApiDoc(openApiDoc));
+  SwaggerModule.setup('api-docs', app, docWithAllParams);
 };
 
 const initApp = (app: INestApplication) => {
