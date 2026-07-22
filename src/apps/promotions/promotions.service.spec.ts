@@ -76,7 +76,7 @@ describe('PromotionsService', () => {
         startDate: new Date('2026-01-01'),
       };
 
-      const mockUser = { userID: 'user-1', userEmail: 'admin@example.com' };
+      const mockUser = { userID: 'user-1', userEmail: 'admin@example.com', roleType: null };
       mockExtended.create.mockResolvedValue({ id: 'promo-1', ...dto });
 
       const result = await service.createPromotion(dto, mockUser);

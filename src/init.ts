@@ -27,6 +27,7 @@ const initApp = (app: INestApplication) => {
   if (FE_URL) {
     app.enableCors({
       origin: FE_URL, // FE_URL dùng để cấu hình CORS, cho phép frontend truy cập backend một cách an toàn.
+      credentials: true,
     });
   }
   applyMiddleware(app);

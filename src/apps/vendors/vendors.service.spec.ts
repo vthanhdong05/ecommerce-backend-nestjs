@@ -45,7 +45,7 @@ const mockQueryUtilService = {
 
 const mockUsersService = { client: mockUsersClient };
 
-const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com' };
+const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com', roleType: null };
 
 const mockVendor = {
   id: 'vendor-id-1',

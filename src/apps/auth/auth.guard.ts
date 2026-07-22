@@ -1,8 +1,15 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
+import { RoleType } from '@prisma/client';
 import { UserInfo } from '../../common/decorators/user.decorator';
-import { IS_SKIP_AUTH } from './auth.decorator';
+import { IS_SKIP_AUTH, ROLES_KEY } from './auth.decorator';
 import { AuthService } from './auth.service';
 import { TokenKeys } from './consts/jwt.const';
 // xác thực (Authentication) - kiểm tra login, token hợp lệ
@@ -33,6 +40,20 @@ export class AuthGuard implements CanActivate {
     } catch (err: unknown) {
       throw new UnauthorizedException((err as Error).message);
     }
+
+    // Kiểm tra role nếu có yêu cầu
+    const requiredRoles = this.reflector.getAllAndOverride<RoleType[]>(ROLES_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (requiredRoles?.length) {
+      const user = req['user'] as UserInfo;
+      const hasRole = requiredRoles.some((role) => user.roleType === role);
+      if (!hasRole) {
+        throw new ForbiddenException('You do not have permission to access this resource');
+      }
+    }
+
     return true;
   }
 

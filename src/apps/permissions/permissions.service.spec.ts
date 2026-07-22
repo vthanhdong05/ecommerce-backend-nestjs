@@ -38,7 +38,7 @@ const mockQueryUtilService = {
   convertFieldsSelectOption: jest.fn().mockReturnValue({}),
 };
 
-const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com' };
+const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com', roleType: null };
 
 const mockPermission = {
   id: 'permission-id-1',

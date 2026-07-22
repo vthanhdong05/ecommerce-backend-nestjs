@@ -40,7 +40,7 @@ const mockUsersService = { client: mockUsersClient };
 const mockRolesService = { client: mockRolesClient };
 const mockVendorsService = { client: mockVendorsClient };
 
-const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com' };
+const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com', roleType: null };
 
 const mockUserVendorRole = {
   user: { id: 'user-id-1', email: 'test@test.com' },

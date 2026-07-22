@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { UserInfo } from '../../common/decorators/user.decorator';
 import { ExcelUtilService } from '../../common/utils/excel-util/excel-util.service';
 import { PaginationUtilService } from '../../common/utils/pagination-util/pagination-util.service';
 import { AutoMockingModule } from '../../testing/auto-mocking/auto-mocking.module';
@@ -29,7 +30,7 @@ const mockCategory = {
   createdBy: null,
 };
 
-const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com' };
+const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com', roleType: null } as UserInfo;
 
 describe('CategoriesService', () => {
   let service: CategoriesService;
