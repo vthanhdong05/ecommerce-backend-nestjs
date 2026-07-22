@@ -19,7 +19,7 @@ const mockExtended = {
   createMany: jest.fn(),
 };
 
-const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com' };
+const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com', roleType: null };
 
 const mockUserData = {
   id: 'user-id-1',

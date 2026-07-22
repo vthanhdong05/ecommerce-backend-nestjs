@@ -19,7 +19,7 @@ const mockExtended = {
 
 const mockVendorsClient = { findMany: jest.fn() };
 
-const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com' };
+const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com', roleType: null };
 
 const mockProduct = {
   id: 'product-id-1',
@@ -91,7 +91,7 @@ describe('ProductsService', () => {
 
     jest
       .spyOn(service.prismaService.category, 'findMany')
-      .mockResolvedValue([{ id: 'cat-id-1', name: 'Electronics' }]);
+      .mockResolvedValue([{ id: 'cat-id-1', name: 'Electronics' }] as any);
 
     jest.spyOn(service.prismaService, '$transaction').mockImplementation((cb: any) =>
       cb({

@@ -18,7 +18,7 @@ const mockExtended = {
 
 const mockProductsClient = { findMany: jest.fn() };
 
-const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com' };
+const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com', roleType: null };
 
 const mockVariant = {
   id: 'variant-id-1',
