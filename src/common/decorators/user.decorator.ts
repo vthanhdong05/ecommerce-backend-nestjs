@@ -1,9 +1,11 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 import { User as UserEntity } from '../../apps/users/entities/user.entity';
+import { RoleType } from '@prisma/client';
 
 export interface UserInfo {
   userID: UserEntity['id'];
   userEmail: UserEntity['email'];
+  roleType: RoleType | null;
 }
 
 // (Tạo decorator @User())

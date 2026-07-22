@@ -57,7 +57,7 @@ const mockUsersService = {
   invalidatePermissionCache: jest.fn().mockResolvedValue(undefined),
 };
 
-const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com' };
+const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com', roleType: null };
 
 const mockRolePermission = {
   role: { id: 'role-id-1', name: 'Admin', description: 'Admin role' },

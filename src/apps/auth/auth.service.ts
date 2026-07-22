@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, TokenExpiredError } from '@nestjs/jwt';
-import { UserInfo } from 'src/common/decorators/user.decorator';
+import { RoleType } from '@prisma/client';
 import { PrismaService } from 'src/common/prisma/prisma.service';
 import { MailTemplate } from 'src/common/utils/mail-util/mail-util.const';
 import { MailUtilService } from 'src/common/utils/mail-util/mail-util.service';
@@ -27,11 +27,30 @@ export class AuthService {
     private readonly configService: ConfigService,
   ) {}
 
-  async createToken<T extends Record<string, any>>(payload: T) {
-    const accessToken = await this.jwtService.signAsync(payload, {
+  async getUserRoleType(userId: string): Promise<RoleType | null> {
+    const systemRole = await this.prisma.userSystemRole.findFirst({
+      where: { userID: userId, status: 'active' },
+      include: { role: true },
+    });
+    if (systemRole) {
+      return systemRole.role.roleType;
+    }
+    const vendorRole = await this.prisma.userVendorRole.findFirst({
+      where: { userID: userId, status: 'active' },
+      include: { role: true },
+    });
+    return vendorRole?.role.roleType ?? null;
+  }
+
+  async createToken<T extends Record<string, any>>(payload: T, roleType: RoleType | null = null) {
+    const tokenPayload = {
+      ...payload,
+      roleType,
+    };
+    const accessToken = await this.jwtService.signAsync(tokenPayload, {
       expiresIn: JWTToken.ACCESS_TOKEN_EXPIRE_IN,
     });
-    const refreshToken = await this.jwtService.signAsync(payload, {
+    const refreshToken = await this.jwtService.signAsync(tokenPayload, {
       expiresIn: JWTToken.REFRESH_TOKEN_EXPIRE_IN,
     });
 
@@ -72,14 +91,17 @@ export class AuthService {
     const isMatch = await this.stringUtilService.compare(password, passwordHashed);
     if (!isMatch) throw new UnauthorizedException('Invalid credentials');
     // Tạo JWT token
+    const roleType = await this.getUserRoleType(user.id);
     const { id: userID, email: userEmail } = user;
-    return await this.createToken({ userID, userEmail });
+    return await this.createToken({ userID, userEmail }, roleType);
   }
 
   async refreshToken(refreshToken: string) {
     const decoded = await this.verifyToken(refreshToken);
-    const { iat: _iat, exp: _exp, ...user } = decoded;
-    return this.createToken(user as UserInfo);
+    const { iat: _iat, exp: _exp, userID } = decoded;
+    // Re-fetch roleType từ DB để đảm bảo luôn có role mới nhất
+    const roleType = await this.getUserRoleType(userID);
+    return this.createToken({ userID, userEmail: decoded.userEmail }, roleType);
   }
 
   sendSMS() {

@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OrderStatus, PromotionScope, PaymentMethod } from '@prisma/client';
+import { UserInfo } from '../../common/decorators/user.decorator';
 import { ExcelUtilService } from '../../common/utils/excel-util/excel-util.service';
 import { PaginationUtilService } from '../../common/utils/pagination-util/pagination-util.service';
 import { StringUtilService } from '../../common/utils/string-util/string-util.service';
@@ -41,7 +42,7 @@ describe('OrdersService', () => {
     payment: { create: jest.fn() },
   };
 
-  const mockUser = { userID: 'user-1', userEmail: 'user@example.com' };
+  const mockUser: UserInfo = { userID: 'user-1', userEmail: 'user@example.com', roleType: null };
 
   beforeEach(async () => {
     jest.clearAllMocks();
