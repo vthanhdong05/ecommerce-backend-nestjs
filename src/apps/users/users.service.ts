@@ -12,7 +12,12 @@ import { PrismaBaseService } from '../../common/services/prisma-base.service';
 import { PaginationUtilService } from '../../common/utils/pagination-util/pagination-util.service';
 import { QueryUtilService } from '../../common/utils/query-util/query-util.service';
 import { CreateUserDto, ImportUsersDto } from './dto/create-user.dto';
-import { ExportUsersDto, GetUsersPaginationDto, IsExistPermissionKeyDto } from './dto/get-user.dto';
+import {
+  ExportUsersDto,
+  GetUsersPaginationDto,
+  IsExistPermissionKeyDto,
+  USER_SORTABLE_FIELDS,
+} from './dto/get-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
 
@@ -43,26 +48,115 @@ export class UsersService extends PrismaBaseService<'user'> implements Options<U
   }
 
   async getUser(where: Prisma.UserWhereUniqueInput) {
-    const data = await this.extended.findUnique({
+    const user = await this.extended.findUnique({
       where,
     });
-    return data;
+    if (!user) return user;
+    const roleType = await this.getUserRoleType(user.id);
+    return { ...user, roleType };
   }
 
   async getUserProfile(userID: User['id']) {
-    return this.extended.findUnique({
+    const user = await this.extended.findUnique({
       where: { id: userID },
     });
+    if (!user) return user;
+    const roleType = await this.getUserRoleType(user.id);
+    return { ...user, roleType };
   }
 
-  async getUsers({ page, itemPerPage }: GetUsersPaginationDto) {
-    const cacheKey = `users:list:${page}:${itemPerPage}`;
+  async getUserRoleType(userId: string): Promise<RoleType | null> {
+    const systemRole = await this.prismaService.userSystemRole.findFirst({
+      where: { userID: userId, status: 'active' },
+      include: { role: true },
+    });
+    if (systemRole) {
+      return systemRole.role.roleType;
+    }
+    const vendorRole = await this.prismaService.userVendorRole.findFirst({
+      where: { userID: userId, status: 'active' },
+      include: { role: true },
+    });
+    return vendorRole?.role.roleType ?? null;
+  }
+
+  async getUsers({ page, itemPerPage, ...filters }: GetUsersPaginationDto) {
+    // Cache key bao gồm cả filter để tránh cache sai
+    const filterKey = JSON.stringify(filters);
+    const cacheKey = `users:list:${page}:${itemPerPage}:${filterKey}`;
     const cached = await this.cacheManager.get(cacheKey);
     if (cached) return cached;
-    const totalItems = await this.extended.count();
+    // Build Prisma where từ filter. Dùng AND-style merge để email/roleType cùng lúc đều hoạt động.
+    const userFieldsWhere: Prisma.UserWhereInput = {};
+    if (filters.email) userFieldsWhere.email = { contains: filters.email, mode: 'insensitive' };
+    if (filters.firstName) userFieldsWhere.firstName = { contains: filters.firstName };
+    if (filters.lastName) userFieldsWhere.lastName = { contains: filters.lastName };
+    if (filters.status) userFieldsWhere.status = filters.status;
+    // roleType không phải field của User — nó đến từ relation. Lọc user có role tương ứng.
+    // `USER` (null) nghĩa là user không có row active nào trong 2 bảng role.
+    const roleClauses: Prisma.UserWhereInput[] = [];
+    if (filters.roleType === 'USER') {
+      roleClauses.push({
+        userSystemRoles: { none: { status: 'active' } },
+        userVendorRoles: { none: { status: 'active' } },
+      });
+    } else if (filters.roleType === 'VENDOR') {
+      roleClauses.push({
+        userVendorRoles: { some: { status: 'active', role: { roleType: 'VENDOR' } } },
+      });
+    } else if (filters.roleType === 'SYSTEM' || filters.roleType === 'SUPER_ADMIN') {
+      roleClauses.push({
+        userSystemRoles: { some: { status: 'active', role: { roleType: filters.roleType } } },
+      });
+    }
+    const where: Prisma.UserWhereInput = {
+      AND: [userFieldsWhere, ...(roleClauses.length ? roleClauses : [])],
+    };
+    const totalItems = await this.extended.count({ where });
     const paging = this.paginationUtilService.paging({ page, itemPerPage, totalItems });
-    const list = await this.extended.findMany({ skip: paging.skip, take: itemPerPage });
-    const data = paging.format(list);
+    // Build orderBy an toàn — whitelist field để tránh Prisma throw trên field lạ.
+    // Luôn tie-break bằng id desc để page boundary ổn định khi nhiều row có cùng giá trị sort.
+    const sortBy = (filters.sortBy as string | undefined) ?? 'createdAt';
+    const sortOrder: 'asc' | 'desc' = filters.sortOrder === 'asc' ? 'asc' : 'desc';
+    const safeSortBy = (USER_SORTABLE_FIELDS as readonly string[]).includes(sortBy)
+      ? sortBy
+      : 'createdAt';
+    const orderBy: Prisma.UserOrderByWithRelationInput[] = [
+      { [safeSortBy]: sortOrder },
+      { id: 'desc' },
+    ];
+    const list = await this.extended.findMany({
+      where,
+      skip: paging.skip,
+      take: itemPerPage,
+      orderBy,
+    });
+    // Lấy roleType cho từng user (batch query để tránh N+1)
+    const userIDs = list.map((u) => u.id);
+    const [systemRoles, vendorRoles] = await Promise.all([
+      this.prismaService.userSystemRole.findMany({
+        where: { userID: { in: userIDs }, status: 'active' },
+        select: { userID: true, role: { select: { roleType: true } } },
+      }),
+      this.prismaService.userVendorRole.findMany({
+        where: { userID: { in: userIDs }, status: 'active' },
+        select: { userID: true, role: { select: { roleType: true } } },
+      }),
+    ]);
+    const roleTypeMap = new Map<string, RoleType>();
+    for (const sr of systemRoles) {
+      roleTypeMap.set(sr.userID, sr.role.roleType);
+    }
+    for (const vr of vendorRoles) {
+      if (!roleTypeMap.has(vr.userID)) {
+        roleTypeMap.set(vr.userID, vr.role.roleType);
+      }
+    }
+    const listWithRoleType = list.map((user) => ({
+      ...user,
+      roleType: roleTypeMap.get(user.id) ?? null,
+    }));
+    const data = paging.format(listWithRoleType);
     // TTL 60 giây
     await this.cacheManager.set(cacheKey, data, 60 * 1000);
     return data;
@@ -76,24 +170,36 @@ export class UsersService extends PrismaBaseService<'user'> implements Options<U
         password: hashedPassword,
       },
     });
+    // List cache stale ngay sau khi tạo: invalidate theo pattern users:list:*
+    await this.invalidateUsersCache();
     return data;
   }
 
   async updateUser(params: { where: Prisma.UserWhereUniqueInput; data: UpdateUserDto }) {
     const { where, data: dataUpdate } = params;
+    if (dataUpdate.password) {
+      dataUpdate.password = await this.stringUtilServive.hash(dataUpdate.password);
+    }
     const data = await this.extended.update({
       data: dataUpdate,
       where,
     });
+    // Sau update, list cache (inactive cache 60s) trả data cũ → cần xoá.
+    await this.invalidateUsersCache();
     return data;
   }
 
   async updateUserProfile(params: { userID: User['id']; data: UpdateUserDto }) {
     const { userID, data: dataUpdate } = params;
-    return this.extended.update({
+    if (dataUpdate.password) {
+      dataUpdate.password = await this.stringUtilServive.hash(dataUpdate.password);
+    }
+    const data = await this.extended.update({
       where: { id: userID },
       data: dataUpdate,
     });
+    await this.invalidateUsersCache();
+    return data;
   }
 
   async deleteUser(where: Prisma.UserWhereUniqueInput) {
@@ -101,6 +207,8 @@ export class UsersService extends PrismaBaseService<'user'> implements Options<U
     //   where,
     // });
     const data = await this.extended.softDelete(where);
+    // Soft delete cũng làm list stale (totalItems giảm, row ẩn).
+    await this.invalidateUsersCache();
     return data;
   }
 

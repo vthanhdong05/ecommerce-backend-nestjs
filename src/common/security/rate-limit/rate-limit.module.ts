@@ -10,7 +10,7 @@ import { RateLimitEnvs } from './rate-limit.const';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const ttlEnv = config.get<string>(RateLimitEnvs.THROTTLE_TTL) ?? '60000';
-        const limitEnv = config.get<string>(RateLimitEnvs.THROTTLE_LIMIT) ?? '10';
+        const limitEnv = config.get<string>(RateLimitEnvs.THROTTLE_LIMIT) ?? '100';
         return [
           {
             ttl: parseInt(ttlEnv),

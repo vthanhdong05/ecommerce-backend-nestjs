@@ -13,6 +13,7 @@ import {
   UsePipes,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { SkipAuth } from '../auth/auth.decorator';
 import { Product } from '@prisma/client';
 import type { Response } from 'express';
 import type { UserInfo } from '../../common/decorators/user.decorator';
@@ -44,12 +45,14 @@ export class ProductsController {
   }
 
   @Get()
+  @SkipAuth()
   @UsePipes(ParseParamsPaginationPipe)
   getProducts(@Query() query: GetProductsPaginationDto) {
     return this.productsService.getProducts(query);
   }
 
   @Get('options')
+  @SkipAuth()
   getProductOptions(@Query() query: GetOptionsParams<Product>) {
     return this.productsService.getOptions(query);
   }
@@ -70,6 +73,7 @@ export class ProductsController {
   }
 
   @Get(':id')
+  @SkipAuth()
   getProduct(@Param('id') id: Product['id']) {
     return this.productsService.getProduct({ id });
   }

@@ -42,6 +42,31 @@ export class AuthService {
     return vendorRole?.role.roleType ?? null;
   }
 
+  async getUserPermissions(userId: string): Promise<string[]> {
+    // Lấy tất cả role của user (cả system và vendor)
+    const [systemRoles, vendorRoles] = await Promise.all([
+      this.prisma.userSystemRole.findMany({
+        where: { userID: userId, status: 'active' },
+        include: { role: { include: { rolePermissions: { include: { permission: true } } } } },
+      }),
+      this.prisma.userVendorRole.findMany({
+        where: { userID: userId, status: 'active' },
+        include: { role: { include: { rolePermissions: { include: { permission: true } } } } },
+      }),
+    ]);
+
+    // Trích xuất permission keys từ các role
+    const permissionKeys = new Set<string>();
+
+    for (const userRole of [...systemRoles, ...vendorRoles]) {
+      for (const rp of userRole.role.rolePermissions) {
+        permissionKeys.add(rp.permission.key);
+      }
+    }
+
+    return Array.from(permissionKeys);
+  }
+
   async createToken<T extends Record<string, any>>(payload: T, roleType: RoleType | null = null) {
     const tokenPayload = {
       ...payload,
@@ -91,17 +116,23 @@ export class AuthService {
     const isMatch = await this.stringUtilService.compare(password, passwordHashed);
     if (!isMatch) throw new UnauthorizedException('Invalid credentials');
     // Tạo JWT token
-    const roleType = await this.getUserRoleType(user.id);
+    const [roleType, permissions] = await Promise.all([
+      this.getUserRoleType(user.id),
+      this.getUserPermissions(user.id),
+    ]);
     const { id: userID, email: userEmail } = user;
-    return await this.createToken({ userID, userEmail }, roleType);
+    return await this.createToken({ userID, userEmail, permissions }, roleType);
   }
 
   async refreshToken(refreshToken: string) {
     const decoded = await this.verifyToken(refreshToken);
     const { iat: _iat, exp: _exp, userID } = decoded;
-    // Re-fetch roleType từ DB để đảm bảo luôn có role mới nhất
-    const roleType = await this.getUserRoleType(userID);
-    return this.createToken({ userID, userEmail: decoded.userEmail }, roleType);
+    // Re-fetch roleType và permissions từ DB để đảm bảo luôn có data mới nhất
+    const [roleType, permissions] = await Promise.all([
+      this.getUserRoleType(userID),
+      this.getUserPermissions(userID),
+    ]);
+    return this.createToken({ userID, userEmail: decoded.userEmail, permissions }, roleType);
   }
 
   sendSMS() {

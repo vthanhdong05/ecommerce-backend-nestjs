@@ -20,9 +20,12 @@ const mockExtended = {
 const mockPrismaService = {
   role: {},
   extended: { role: mockExtended },
+  permission: { findMany: jest.fn().mockResolvedValue([]) },
   rolePermission: { findFirst: jest.fn().mockResolvedValue(null) },
   userSystemRole: { findFirst: jest.fn().mockResolvedValue(null) },
   userVendorRole: { findFirst: jest.fn().mockResolvedValue(null) },
+  // Mock $transaction: chạy callback với mock tx (chính là mockPrismaService)
+  $transaction: jest.fn(),
 };
 
 const mockPaginationUtilService = {
@@ -74,11 +77,17 @@ describe('RolesService', () => {
   afterEach(() => jest.clearAllMocks());
 
   describe('getRole', () => {
-    it('should return a role by id', async () => {
+    it('should return a role by id with permissions', async () => {
       mockExtended.findUnique.mockResolvedValue(mockRole);
       const result = await service.getRole({ id: 'role-id-1' });
-      expect(result).toEqual(mockRole); // Kiểm tra output của service
-      expect(mockExtended.findUnique).toHaveBeenCalledWith({ where: { id: 'role-id-1' } });
+      expect(result).toEqual(mockRole);
+      // Verify gọi include rolePermissions
+      expect(mockExtended.findUnique).toHaveBeenCalledWith({
+        where: { id: 'role-id-1' },
+        include: {
+          rolePermissions: { include: { permission: true } },
+        },
+      });
     });
 
     it('should return null if role not found', async () => {
@@ -104,32 +113,128 @@ describe('RolesService', () => {
   });
 
   describe('createRole', () => {
-    it('should create a role', async () => {
-      mockExtended.create.mockResolvedValue(mockRole);
+    it('should create a role without permissions', async () => {
+      // Mock tx.role.create
+      const txRoleCreate = jest.fn().mockResolvedValue(mockRole);
+      const txRoleFindUnique = jest.fn().mockResolvedValue(mockRole);
+      mockPrismaService.$transaction.mockImplementation((cb) =>
+        cb({ role: { create: txRoleCreate, findUnique: txRoleFindUnique } } as any),
+      );
 
       const dto = { name: 'Admin', description: 'Admin role', roleType: RoleType.SYSTEM };
-      const result = await service.createRole(dto);
+      const result = await service.createRole(dto, { userEmail: 'admin@test.com' } as any);
 
+      expect(txRoleCreate).toHaveBeenCalledWith({
+        data: {
+          name: 'Admin',
+          description: 'Admin role',
+          roleType: RoleType.SYSTEM,
+          createdBy: 'admin@test.com',
+        },
+      });
       expect(result).toEqual(mockRole);
-      expect(mockExtended.create).toHaveBeenCalledWith({ data: dto });
+    });
+
+    it('should create a role with permissions', async () => {
+      const txRoleCreate = jest.fn().mockResolvedValue(mockRole);
+      const txRoleFindUnique = jest.fn().mockResolvedValue(mockRole);
+      const txRolePermCreateMany = jest.fn().mockResolvedValue({ count: 2 });
+      const txPermFindMany = jest.fn().mockResolvedValue([{ id: 'p1' }, { id: 'p2' }]);
+
+      mockPrismaService.$transaction.mockImplementation((cb) =>
+        cb({
+          role: { create: txRoleCreate, findUnique: txRoleFindUnique },
+          permission: { findMany: txPermFindMany },
+          rolePermission: { createMany: txRolePermCreateMany },
+        } as any),
+      );
+
+      const dto = {
+        name: 'Admin',
+        description: 'Admin role',
+        roleType: RoleType.SYSTEM,
+        permissionIDs: ['p1', 'p2'],
+      };
+      await service.createRole(dto, { userEmail: 'admin@test.com' } as any);
+
+      expect(txRolePermCreateMany).toHaveBeenCalledWith({
+        data: [
+          { roleID: 'role-id-1', permissionID: 'p1', createdBy: 'admin@test.com' },
+          { roleID: 'role-id-1', permissionID: 'p2', createdBy: 'admin@test.com' },
+        ],
+      });
+    });
+
+    it('should throw if permissionIDs not found', async () => {
+      const txRoleCreate = jest.fn().mockResolvedValue(mockRole);
+      const txPermFindMany = jest.fn().mockResolvedValue([{ id: 'p1' }]); // p2 missing
+
+      mockPrismaService.$transaction.mockImplementation((cb) =>
+        cb({
+          role: { create: txRoleCreate },
+          permission: { findMany: txPermFindMany },
+        } as any),
+      );
+
+      await expect(
+        service.createRole(
+          { name: 'Admin', roleType: RoleType.SYSTEM, permissionIDs: ['p1', 'p2'] },
+          { userEmail: 'admin@test.com' } as any,
+        ),
+      ).rejects.toThrow('Invalid permission IDs: p2');
     });
   });
 
   describe('updateRole', () => {
-    it('should update a role', async () => {
+    it('should update role name only without touching permissions', async () => {
       const updated = { ...mockRole, name: 'Super Admin' };
-      mockExtended.update.mockResolvedValue(updated);
+      const txRoleUpdate = jest.fn().mockResolvedValue(updated);
+      const txRoleFindUnique = jest.fn().mockResolvedValue(updated);
+
+      mockPrismaService.$transaction.mockImplementation((cb) =>
+        cb({
+          role: { update: txRoleUpdate, findUnique: txRoleFindUnique },
+        } as any),
+      );
 
       const result = await service.updateRole({
         where: { id: 'role-id-1' },
         data: { name: 'Super Admin' },
+        user: { userEmail: 'admin@test.com' } as any,
       });
 
       expect(result.name).toBe('Super Admin');
-      expect(mockExtended.update).toHaveBeenCalledWith({
+      // Không truyền permissionIDs → không gọi rolePermission.deleteMany
+      expect(txRoleUpdate).toHaveBeenCalledWith({
         where: { id: 'role-id-1' },
         data: { name: 'Super Admin' },
       });
+    });
+
+    it('should replace permissions when permissionIDs provided', async () => {
+      const updated = { ...mockRole, name: 'Admin' };
+      const txRoleUpdate = jest.fn().mockResolvedValue(updated);
+      const txRolePermDeleteMany = jest.fn().mockResolvedValue({ count: 3 });
+      const txRolePermCreateMany = jest.fn().mockResolvedValue({ count: 2 });
+      const txPermFindMany = jest.fn().mockResolvedValue([{ id: 'p1' }, { id: 'p2' }]);
+      const txRoleFindUnique = jest.fn().mockResolvedValue(updated);
+
+      mockPrismaService.$transaction.mockImplementation((cb) =>
+        cb({
+          role: { update: txRoleUpdate, findUnique: txRoleFindUnique },
+          permission: { findMany: txPermFindMany },
+          rolePermission: { deleteMany: txRolePermDeleteMany, createMany: txRolePermCreateMany },
+        } as any),
+      );
+
+      await service.updateRole({
+        where: { id: 'role-id-1' },
+        data: { permissionIDs: ['p1', 'p2'] },
+        user: { userEmail: 'admin@test.com' } as any,
+      });
+
+      expect(txRolePermDeleteMany).toHaveBeenCalledWith({ where: { roleID: 'role-id-1' } });
+      expect(txRolePermCreateMany).toHaveBeenCalled();
     });
   });
 

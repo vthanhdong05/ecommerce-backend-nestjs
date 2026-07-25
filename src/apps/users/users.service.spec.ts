@@ -59,6 +59,12 @@ describe('UsersService', () => {
 
     jest.spyOn(service, 'extended', 'get').mockReturnValue(mockExtended as any);
 
+    // Mock prismaService.userSystemRole và userVendorRole
+    jest.spyOn(service.prismaService.userSystemRole, 'findFirst').mockResolvedValue(null);
+    jest.spyOn(service.prismaService.userVendorRole, 'findFirst').mockResolvedValue(null);
+    jest.spyOn(service.prismaService.userSystemRole, 'findMany').mockResolvedValue([]);
+    jest.spyOn(service.prismaService.userVendorRole, 'findMany').mockResolvedValue([]);
+
     jest.spyOn(paginationUtilService, 'paging').mockReturnValue({
       skip: 0,
       format: jest.fn().mockReturnValue({ list: [], totalPages: 0, totalItems: 0 }),
@@ -71,10 +77,10 @@ describe('UsersService', () => {
   afterEach(() => jest.clearAllMocks());
 
   describe('getUser', () => {
-    it('should return user by id', async () => {
+    it('should return user by id with roleType', async () => {
       mockExtended.findUnique.mockResolvedValue(mockUserData);
       const result = await service.getUser({ id: 'user-id-1' });
-      expect(result).toEqual(mockUserData);
+      expect(result).toEqual({ ...mockUserData, roleType: null });
       expect(mockExtended.findUnique).toHaveBeenCalledWith({ where: { id: 'user-id-1' } });
     });
 
@@ -86,10 +92,10 @@ describe('UsersService', () => {
   });
 
   describe('getUserProfile', () => {
-    it('should return user profile', async () => {
+    it('should return user profile with roleType', async () => {
       mockExtended.findUnique.mockResolvedValue(mockUserData);
       const result = await service.getUserProfile('user-id-1');
-      expect(result).toEqual(mockUserData);
+      expect(result).toEqual({ ...mockUserData, roleType: null });
     });
 
     it('should return null if not found', async () => {
@@ -113,12 +119,110 @@ describe('UsersService', () => {
     it('should fetch from db and set cache if no cache', async () => {
       mockExtended.count.mockResolvedValue(1);
       mockExtended.findMany.mockResolvedValue([mockUserData]);
+      // Mock paging.format -> trả về list với roleType đã được thêm
+      const mockFormat = jest.fn().mockImplementation((list) => ({
+        list: list.map((u: any) => ({ ...u, roleType: u.roleType ?? null })),
+        totalPages: 1,
+        totalItems: 1,
+      }));
+      jest.spyOn(paginationUtilService, 'paging').mockReturnValue({
+        skip: 0,
+        format: mockFormat,
+      } as any);
 
       const result = await service.getUsers({ page: 1, itemPerPage: 10 });
 
       expect(mockExtended.count).toHaveBeenCalled();
       expect(mockExtended.findMany).toHaveBeenCalled();
       expect(result).toHaveProperty('list');
+      // Mỗi user phải có roleType (mặc định null khi không có role)
+      expect(result.list[0]).toHaveProperty('roleType');
+    });
+
+    it('should filter by email', async () => {
+      mockExtended.count.mockResolvedValue(1);
+      mockExtended.findMany.mockResolvedValue([mockUserData]);
+      jest.spyOn(paginationUtilService, 'paging').mockReturnValue({
+        skip: 0,
+        format: jest.fn().mockImplementation((list) => ({
+          list: list.map((u: any) => ({ ...u, roleType: null })),
+          totalPages: 1,
+          totalItems: 1,
+        })),
+      } as any);
+
+      await service.getUsers({ page: 1, itemPerPage: 10, email: 'test@' });
+
+      expect(mockExtended.count).toHaveBeenCalledWith({
+        where: {
+          AND: [{ email: { contains: 'test@', mode: 'insensitive' } }],
+        },
+      });
+      expect(mockExtended.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            AND: [{ email: { contains: 'test@', mode: 'insensitive' } }],
+          },
+        }),
+      );
+    });
+
+    it('should filter by roleType', async () => {
+      mockExtended.count.mockResolvedValue(1);
+      mockExtended.findMany.mockResolvedValue([mockUserData]);
+      jest.spyOn(paginationUtilService, 'paging').mockReturnValue({
+        skip: 0,
+        format: jest.fn().mockImplementation((list) => ({
+          list: list.map((u: any) => ({ ...u, roleType: null })),
+          totalPages: 1,
+          totalItems: 1,
+        })),
+      } as any);
+
+      await service.getUsers({ page: 1, itemPerPage: 10, roleType: 'SUPER_ADMIN' });
+
+      expect(mockExtended.count).toHaveBeenCalledWith({
+        where: {
+          AND: [
+            {},
+            {
+              userSystemRoles: {
+                some: { status: 'active', role: { roleType: 'SUPER_ADMIN' } },
+              },
+            },
+          ],
+        },
+      });
+    });
+
+    it('should use different cache key for different filters', async () => {
+      mockExtended.count.mockResolvedValue(1);
+      mockExtended.findMany.mockResolvedValue([mockUserData]);
+      jest.spyOn(paginationUtilService, 'paging').mockReturnValue({
+        skip: 0,
+        format: jest.fn().mockImplementation((list) => ({
+          list: list.map((u: any) => ({ ...u, roleType: null })),
+          totalPages: 1,
+          totalItems: 1,
+        })),
+      } as any);
+
+      // Cache miss for first call
+      jest.spyOn(cacheManager, 'get').mockResolvedValueOnce(null);
+      await service.getUsers({ page: 1, itemPerPage: 10, email: 'a@test.com' });
+
+      // Cache hit for second call with same filter
+      jest
+        .spyOn(cacheManager, 'get')
+        .mockResolvedValueOnce({ list: [], totalPages: 0, totalItems: 0 });
+      await service.getUsers({ page: 1, itemPerPage: 10, email: 'a@test.com' });
+
+      // Cache miss for third call with different filter
+      jest.spyOn(cacheManager, 'get').mockResolvedValueOnce(null);
+      await service.getUsers({ page: 1, itemPerPage: 10, email: 'b@test.com' });
+
+      // 3 cache gets, 2 cache sets (hits don't set)
+      expect(cacheManager.get).toHaveBeenCalledTimes(3);
     });
   });
 
