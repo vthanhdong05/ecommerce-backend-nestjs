@@ -39,18 +39,36 @@ export class RolesService extends PrismaBaseService<'role'> implements Options<R
   async getRole(where: Prisma.RoleWhereUniqueInput) {
     const data = await this.extended.findUnique({
       where,
+      include: {
+        rolePermissions: {
+          include: { permission: true },
+        },
+      },
     });
     return data;
   }
 
-  async getRoles({ page, itemPerPage }: GetRolesPaginationDto) {
-    const totalItems = await this.extended.count();
+  async getRoles({ page, itemPerPage, ...filters }: GetRolesPaginationDto) {
+    // Build Prisma where từ filter. Search name dùng contains (case-insensitive)
+    // thay vì exact match từ PartialType(Role) để user tìm "ad" ra "Admin".
+    const where: Prisma.RoleWhereInput = {};
+    if (filters.name && typeof filters.name === 'string') {
+      where.name = { contains: filters.name, mode: 'insensitive' };
+    }
+    if (filters.roleType) {
+      where.roleType = filters.roleType;
+    }
+    if (filters.description && typeof filters.description === 'string') {
+      where.description = { contains: filters.description, mode: 'insensitive' };
+    }
+    const totalItems = await this.extended.count({ where });
     const paging = this.paginationUtilService.paging({
       page,
       itemPerPage,
       totalItems,
     });
     const list = await this.extended.findMany({
+      where,
       skip: paging.skip,
       take: itemPerPage,
     });
@@ -60,18 +78,78 @@ export class RolesService extends PrismaBaseService<'role'> implements Options<R
   }
 
   async createRole(createRoleDto: CreateRoleDto, user: UserInfo) {
-    return this.extended.create({
-      data: { ...createRoleDto, user } as any,
+    const { permissionIDs, ...roleData } = createRoleDto;
+    return this.prismaService.$transaction(async (tx) => {
+      const role = await tx.role.create({
+        data: { ...roleData, createdBy: user.userEmail },
+      });
+      if (permissionIDs?.length) {
+        // Validate tất cả permissionIDs tồn tại trước khi insert (tránh FK error)
+        const existingPermissions = await tx.permission.findMany({
+          where: { id: { in: permissionIDs } },
+          select: { id: true },
+        });
+        const existingIDs = new Set(existingPermissions.map((p) => p.id));
+        const invalidIDs = permissionIDs.filter((id) => !existingIDs.has(id));
+        if (invalidIDs.length) {
+          throw new BadRequestException(`Invalid permission IDs: ${invalidIDs.join(', ')}`);
+        }
+        await tx.rolePermission.createMany({
+          data: permissionIDs.map((permissionID) => ({
+            roleID: role.id,
+            permissionID,
+            createdBy: user.userEmail,
+          })),
+        });
+      }
+      // Trả về role kèm permissions để FE có thể dùng luôn
+      return tx.role.findUnique({
+        where: { id: role.id },
+        include: { rolePermissions: { include: { permission: true } } },
+      });
     });
   }
 
-  async updateRole(params: { where: Prisma.RoleWhereUniqueInput; data: UpdateRoleDto }) {
-    const { where, data: dataUpdate } = params;
-    const data = await this.extended.update({
-      data: dataUpdate,
-      where,
+  async updateRole(params: {
+    where: Prisma.RoleWhereUniqueInput;
+    data: UpdateRoleDto;
+    user: UserInfo;
+  }) {
+    const { where, data: dataUpdate, user } = params;
+    const { permissionIDs, ...roleData } = dataUpdate;
+    return this.prismaService.$transaction(async (tx) => {
+      const role = await tx.role.update({
+        data: roleData,
+        where,
+      });
+      // Nếu truyền permissionIDs → thay thế toàn bộ (xóa cũ + thêm mới)
+      // Nếu không truyền → giữ nguyên
+      if (permissionIDs !== undefined) {
+        await tx.rolePermission.deleteMany({ where: { roleID: role.id } });
+        if (permissionIDs.length) {
+          const existingPermissions = await tx.permission.findMany({
+            where: { id: { in: permissionIDs } },
+            select: { id: true },
+          });
+          const existingIDs = new Set(existingPermissions.map((p) => p.id));
+          const invalidIDs = permissionIDs.filter((id) => !existingIDs.has(id));
+          if (invalidIDs.length) {
+            throw new BadRequestException(`Invalid permission IDs: ${invalidIDs.join(', ')}`);
+          }
+          await tx.rolePermission.createMany({
+            data: permissionIDs.map((permissionID) => ({
+              roleID: role.id,
+              permissionID,
+              createdBy: user.userEmail,
+            })),
+          });
+        }
+      }
+      return tx.role.findUnique({
+        where: { id: role.id },
+        include: { rolePermissions: { include: { permission: true } } },
+      });
     });
-    return data;
   }
 
   async getOptions(params: GetOptionsParams<Role>) {
