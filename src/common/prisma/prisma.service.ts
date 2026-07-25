@@ -109,7 +109,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
             // (Không áp dụng với bảng trung gian)
             if (!this.JUNCTION_TABLES.includes(model)) {
               args.where = { ...args.where, deletedAt: null };
-              args.orderBy = [{ updatedAt: 'desc' }, { createdAt: 'desc' }];
+              // Nếu client đã truyền orderBy thì GIỮ NGUYÊN (không overwrite).
+              // Nếu không có thì fallback mặc định updatedAt/createdAt desc.
+              if (!args.orderBy) {
+                args.orderBy = [{ updatedAt: 'desc' }, { createdAt: 'desc' }];
+              }
             }
             return query(args);
           },

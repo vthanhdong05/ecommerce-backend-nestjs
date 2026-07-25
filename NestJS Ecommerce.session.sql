@@ -1,2 +1,2 @@
-SELECT * FROM "Vendor"
+SELECT * FROM "User"
 -- DELETE FROM "Permission"

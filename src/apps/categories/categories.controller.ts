@@ -13,6 +13,7 @@ import {
   UsePipes,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { SkipAuth } from '../auth/auth.decorator';
 import { Category } from '@prisma/client';
 import type { Response } from 'express';
 import type { UserInfo } from '../../common/decorators/user.decorator';
@@ -44,12 +45,14 @@ export class CategoriesController {
   }
 
   @Get()
+  @SkipAuth()
   @UsePipes(ParseParamsPaginationPipe)
   getCategories(@Query() query: GetCategoriesPaginationDto) {
     return this.categoriesService.getCategories(query);
   }
 
   @Get('options')
+  @SkipAuth()
   getCategoryOptions(@Query() query: GetOptionsParams<Category>) {
     return this.categoriesService.getOptions(query);
   }
@@ -70,6 +73,7 @@ export class CategoriesController {
   }
 
   @Get(':id')
+  @SkipAuth()
   getCategory(@Param('id') id: Category['id']) {
     return this.categoriesService.getCategory({ id });
   }
