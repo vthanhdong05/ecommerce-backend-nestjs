@@ -1,4 +1,6 @@
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Test, TestingModule } from '@nestjs/testing';
+import { CacheHelperService } from '../../common/utils/cache-util/cache-helper.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ExcelUtilService } from '../../common/utils/excel-util/excel-util.service';
 import { PaginationUtilService } from '../../common/utils/pagination-util/pagination-util.service';
@@ -38,6 +40,16 @@ const mockQueryUtilService = {
   convertFieldsSelectOption: jest.fn().mockReturnValue({}),
 };
 
+const mockCacheManager = {
+  get: jest.fn().mockResolvedValue(null),
+  set: jest.fn().mockResolvedValue(undefined),
+  del: jest.fn().mockResolvedValue(undefined),
+};
+
+const mockCacheHelperService = {
+  deleteByPattern: jest.fn().mockResolvedValue(undefined),
+};
+
 const mockUser = { userID: 'user-id-1', userEmail: 'test@test.com', roleType: null };
 
 const mockPermission = {
@@ -63,6 +75,8 @@ describe('PermissionsService', () => {
         { provide: PaginationUtilService, useValue: mockPaginationUtilService },
         { provide: ExcelUtilService, useValue: mockExcelUtilService },
         { provide: QueryUtilService, useValue: mockQueryUtilService },
+        { provide: CACHE_MANAGER, useValue: mockCacheManager },
+        { provide: CacheHelperService, useValue: mockCacheHelperService },
       ],
     }).compile();
 
@@ -97,6 +111,18 @@ describe('PermissionsService', () => {
       expect(result).toHaveProperty('list');
       expect(result).toHaveProperty('totalPages');
       expect(result).toHaveProperty('totalItems');
+      // Cache miss lần đầu → set cache
+      expect(mockCacheManager.set).toHaveBeenCalled();
+    });
+
+    it('should return cached data when cache hit', async () => {
+      const cached = { list: [mockPermission], totalPages: 1, totalItems: 1 };
+      mockCacheManager.get.mockResolvedValueOnce(cached);
+      const result = await service.getPermissions({ page: 1, itemPerPage: 10 });
+      expect(result).toEqual(cached);
+      // Cache hit → không query DB
+      expect(mockExtended.count).not.toHaveBeenCalled();
+      expect(mockExtended.findMany).not.toHaveBeenCalled();
     });
   });
 
@@ -109,6 +135,8 @@ describe('PermissionsService', () => {
       expect(mockExtended.create).toHaveBeenCalledWith({
         data: { ...dto, user: mockUser },
       });
+      // Sau create → phải invalidate cache
+      expect(mockCacheHelperService.deleteByPattern).toHaveBeenCalledWith('permissions:list:*');
     });
 
     it('should throw if prisma throws', async () => {
@@ -144,6 +172,8 @@ describe('PermissionsService', () => {
       const result = await service.deletePermission({ id: 'permission-id-1' });
       expect(result).toEqual({ count: 1 });
       expect(mockExtended.softDelete).toHaveBeenCalledWith({ id: 'permission-id-1' });
+      // Sau delete → phải invalidate cache
+      expect(mockCacheHelperService.deleteByPattern).toHaveBeenCalledWith('permissions:list:*');
     });
   });
 
