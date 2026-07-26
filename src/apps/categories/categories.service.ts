@@ -9,7 +9,11 @@ import { ExcelUtilService } from '../../common/utils/excel-util/excel-util.servi
 import { PaginationUtilService } from '../../common/utils/pagination-util/pagination-util.service';
 import { QueryUtilService } from '../../common/utils/query-util/query-util.service';
 import { CreateCategoryDto, ImportCategoriesDto } from './dto/create-category.dto';
-import { ExportCategoriesDto, GetCategoriesPaginationDto } from './dto/get-category.dto';
+import {
+  CATEGORY_SORTABLE_FIELDS,
+  ExportCategoriesDto,
+  GetCategoriesPaginationDto,
+} from './dto/get-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { Category } from './entities/category.entity';
 import { CacheHelperService } from 'src/common/utils/cache-util/cache-helper.service';
@@ -46,19 +50,39 @@ export class CategoriesService extends PrismaBaseService<'category'> implements 
     return data;
   }
 
-  async getCategories({ page, itemPerPage }: GetCategoriesPaginationDto) {
-    const cacheKey = `categories:list:${page}:${itemPerPage}`;
+  async getCategories({ page, itemPerPage, ...filters }: GetCategoriesPaginationDto) {
+    // Cache key bao gồm filter/sort để tránh cache sai (partial key dễ leak data).
+    const filterKey = JSON.stringify(filters);
+    const cacheKey = `categories:list:${page}:${itemPerPage}:${filterKey}`;
     const cached = await this.cacheManager.get(cacheKey);
     if (cached) return cached;
-    const totalItems = await this.extended.count();
+    // Build Prisma where từ filter. AND-style merge để name/parentID cùng lúc đều hoạt động.
+    const where: Prisma.CategoryWhereInput = {};
+    if (filters.name) where.name = { contains: filters.name, mode: 'insensitive' };
+    // parentID === null → chỉ lấy root; bỏ qua khi undefined.
+    if (filters.parentID !== undefined) where.parentID = filters.parentID;
+    const totalItems = await this.extended.count({ where });
     const paging = this.paginationUtilService.paging({
       page,
       itemPerPage,
       totalItems,
     });
+    // Build orderBy an toàn — whitelist field để tránh Prisma throw trên field lạ.
+    // Tie-break bằng id desc để page boundary ổn định khi nhiều row cùng giá trị sort.
+    const sortBy = (filters.sortBy as string | undefined) ?? 'createdAt';
+    const sortOrder: 'asc' | 'desc' = filters.sortOrder === 'asc' ? 'asc' : 'desc';
+    const safeSortBy = (CATEGORY_SORTABLE_FIELDS as readonly string[]).includes(sortBy)
+      ? sortBy
+      : 'createdAt';
+    const orderBy: Prisma.CategoryOrderByWithRelationInput[] = [
+      { [safeSortBy]: sortOrder },
+      { id: 'desc' },
+    ];
     const list = await this.extended.findMany({
+      where,
       skip: paging.skip,
       take: itemPerPage,
+      orderBy,
     });
     const data = paging.format(list);
     await this.cacheManager.set(cacheKey, data, 5 * 60 * 1000); // 5 phút
@@ -89,6 +113,8 @@ export class CategoriesService extends PrismaBaseService<'category'> implements 
       data: dataUpdate,
       where,
     });
+    // Sau update, list cache (inactive cache 5 phút) trả data cũ → cần xoá.
+    await this.invalidateCategoriesCache();
     return data;
   }
 
@@ -100,7 +126,8 @@ export class CategoriesService extends PrismaBaseService<'category'> implements 
       where: {
         ...searchFields,
       },
-      take: Number(limit),
+      // Default 100 nếu client không truyền limit — Number(undefined) = NaN làm Prisma throw.
+      take: Number(limit) || 100,
     });
     return data;
   }
@@ -176,6 +203,9 @@ export class CategoriesService extends PrismaBaseService<'category'> implements 
         'Cannot delete a category that has subcategories. Delete or move subcategories first.',
       );
     }
-    return this.extended.softDelete(where);
+    const data = await this.extended.softDelete(where);
+    // Soft delete cũng làm list stale (totalItems giảm, row ẩn).
+    await this.invalidateCategoriesCache();
+    return data;
   }
 }
