@@ -10,7 +10,11 @@ import { QueryUtilService } from '../../common/utils/query-util/query-util.servi
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { CreateVendorDto, ImportVendorsDto } from './dto/create-vendor.dto';
-import { ExportVendorsDto, GetVendorsPaginationDto } from './dto/get-vendor.dto';
+import {
+  ExportVendorsDto,
+  GetVendorsPaginationDto,
+  VENDOR_SORTABLE_FIELDS,
+} from './dto/get-vendor.dto';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
 import { Vendor } from './entities/vendor.entity';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -77,16 +81,33 @@ export class VendorsService extends PrismaBaseService<'vendor'> implements Optio
     return data;
   }
 
-  async getVendors({ page, itemPerPage }: GetVendorsPaginationDto) {
-    const totalItems = await this.extended.count();
+  async getVendors({ page, itemPerPage, ...filters }: GetVendorsPaginationDto) {
+    // Build Prisma where từ filter. AND-style merge để name/status cùng lúc đều hoạt động.
+    const where: Prisma.VendorWhereInput = {};
+    if (filters.name) where.name = { contains: filters.name, mode: 'insensitive' };
+    if (filters.status) where.status = filters.status;
+    const totalItems = await this.extended.count({ where });
     const paging = this.paginationUtilService.paging({
       page,
       itemPerPage,
       totalItems,
     });
+    // Build orderBy an toàn — whitelist field để tránh Prisma throw trên field lạ.
+    // Tie-break bằng id desc để page boundary ổn định khi nhiều row cùng giá trị sort.
+    const sortBy = (filters.sortBy as string | undefined) ?? 'createdAt';
+    const sortOrder: 'asc' | 'desc' = filters.sortOrder === 'asc' ? 'asc' : 'desc';
+    const safeSortBy = (VENDOR_SORTABLE_FIELDS as readonly string[]).includes(sortBy)
+      ? sortBy
+      : 'createdAt';
+    const orderBy: Prisma.VendorOrderByWithRelationInput[] = [
+      { [safeSortBy]: sortOrder },
+      { id: 'desc' },
+    ];
     const list = await this.extended.findMany({
+      where,
       skip: paging.skip,
       take: itemPerPage,
+      orderBy,
     });
 
     const data = paging.format(list);
