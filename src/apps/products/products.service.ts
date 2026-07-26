@@ -115,9 +115,14 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
       });
       if (!product) throw new NotFoundException('Product not found');
     }
+    // Tách categoryIDs ra khỏi dataUpdate trước khi đẩy vào tx.product.update — vì
+    // Product model không có field `categoryIDs` (quan hệ n-n qua bảng productCategory).
+    const { categoryIDs, ...productData } = dataUpdate as UpdateProductDto & {
+      categoryIDs?: string[];
+    };
     return this.prismaService.$transaction(async (tx) => {
       const data = await tx.product.update({
-        data: dataUpdate,
+        data: productData,
         where: uniqueWhere,
       });
       // Đồng bộ giá/tồn kho xuống variant ẩn, vì OrderItem luôn lấy giá từ ProductVariant, không phải từ Product
@@ -131,6 +136,19 @@ export class ProductsService extends PrismaBaseService<'product'> implements Opt
             }),
           },
         });
+      }
+      // Sync product ↔ categories (chỉ khi FE gửi categoryIDs). Cho phép mảng rỗng
+      // để vendor "xóa hết" categories nếu muốn.
+      if (categoryIDs !== undefined) {
+        await tx.productCategory.deleteMany({ where: { productID: uniqueWhere.id } });
+        if (categoryIDs.length > 0) {
+          await tx.productCategory.createMany({
+            data: categoryIDs.map((categoryID) => ({
+              productID: uniqueWhere.id!,
+              categoryID,
+            })),
+          });
+        }
       }
       return data;
     });

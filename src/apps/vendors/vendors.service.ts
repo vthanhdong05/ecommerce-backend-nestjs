@@ -159,7 +159,8 @@ export class VendorsService extends PrismaBaseService<'vendor'> implements Optio
       where: {
         ...searchFields,
       },
-      take: Number(limit),
+      // Default 100 nếu client không truyền limit — Number(undefined) = NaN làm Prisma throw.
+      take: Number(limit) || 100,
     });
     return data;
   }

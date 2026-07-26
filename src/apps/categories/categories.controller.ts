@@ -13,6 +13,7 @@ import {
   UsePipes,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { ZodValidationPipe } from 'nestjs-zod';
 import { SkipAuth } from '../auth/auth.decorator';
 import { Category } from '@prisma/client';
 import type { Response } from 'express';
@@ -53,6 +54,9 @@ export class CategoriesController {
 
   @Get('options')
   @SkipAuth()
+  // Override global ZodValidationPipe: query type là interface (không phải ZodDto),
+  // pipe cần schema/DTO để validate. Không truyền schema → pipe skip validation.
+  @UsePipes(new ZodValidationPipe())
   getCategoryOptions(@Query() query: GetOptionsParams<Category>) {
     return this.categoriesService.getOptions(query);
   }

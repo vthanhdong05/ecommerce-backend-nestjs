@@ -12,6 +12,7 @@ import {
   UseInterceptors,
   UsePipes,
 } from '@nestjs/common';
+import { ZodValidationPipe } from 'nestjs-zod';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Vendor } from '@prisma/client';
 import type { Response } from 'express';
@@ -50,6 +51,10 @@ export class VendorsController {
   }
 
   @Get('options')
+  // Override global ZodValidationPipe: query type là interface (không phải ZodDto),
+  // pipe cần schema/DTO để validate. Không truyền schema → pipe skip validation,
+  // vẫn giữ behavior giống cũ (nhận raw query object).
+  @UsePipes(new ZodValidationPipe())
   getVendorOptions(@Query() query: GetOptionsParams<Vendor>) {
     return this.vendorsService.getOptions(query);
   }
