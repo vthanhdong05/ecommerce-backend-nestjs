@@ -6,9 +6,11 @@ import {
   HealthIndicatorResult,
   PrismaHealthIndicator,
 } from '@nestjs/terminus';
+import { SkipAuth } from 'src/apps/auth/auth.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheHelperService } from '../utils/cache-util/cache-helper.service';
 
+@SkipAuth()
 @Controller('health')
 export class HealthController {
   constructor(
